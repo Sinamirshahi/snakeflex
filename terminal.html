@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python Web Terminal - {{PYTHON_FILE}}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #0d1117;
+            color: #c9d1d9;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .terminal-container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
+        }
+        
+        .terminal-header {
+            background: #21262d;
+            border-bottom: 1px solid #30363d;
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        }
+        
+        .terminal-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        
+        .terminal-controls {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .control-btn {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .close { background: #ff5f56; }
+        .minimize { background: #ffbd2e; }
+        .maximize { background: #27ca3f; }
+        
+        .terminal-info {
+            background: #1c2128;
+            padding: 8px 20px;
+            font-size: 12px;
+            color: #7d8590;
+            border-bottom: 1px solid #30363d;
+        }
+        
+        .terminal-output {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #0d1117;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        
+        .command-line {
+            color: #58a6ff;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        
+        .command-line::before {
+            content: "$ ";
+            color: #7c3aed;
+        }
+        
+        .output-line {
+            margin: 2px 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        
+        .output-line.stdout {
+            color: #c9d1d9;
+        }
+        
+        .output-line.stderr {
+            color: #f85149;
+        }
+        
+        .output-line.info {
+            color: #79c0ff;
+        }
+        
+        .output-line.success {
+            color: #56d364;
+        }
+        
+        .input-prompt {
+            color: #ffd700;
+            font-weight: bold;
+        }
+        
+        .execution-controls {
+            background: #21262d;
+            border-top: 1px solid #30363d;
+            padding: 15px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .control-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .run-btn {
+            background: linear-gradient(135deg, #238636, #2ea043);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        
+        .run-btn:hover {
+            background: linear-gradient(135deg, #2ea043, #238636);
+            transform: translateY(-1px);
+        }
+        
+        .run-btn:disabled {
+            background: #6e7681;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .clear-btn {
+            background: linear-gradient(135deg, #6f42c1, #8b5cf6);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        
+        .clear-btn:hover {
+            background: linear-gradient(135deg, #8b5cf6, #6f42c1);
+            transform: translateY(-1px);
+        }
+        
+        .input-section {
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+            background: rgba(255, 215, 0, 0.1);
+            border: 1px solid #ffd700;
+            border-radius: 6px;
+            padding: 12px;
+        }
+        
+        .input-section.show {
+            display: flex;
+        }
+        
+        .input-label {
+            font-size: 12px;
+            color: #ffd700;
+            font-weight: bold;
+        }
+        
+        .input-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        
+        .input-field {
+            flex: 1;
+            background: #0d1117;
+            border: 1px solid #ffd700;
+            border-radius: 4px;
+            padding: 8px 12px;
+            color: #c9d1d9;
+            font-family: inherit;
+            font-size: 14px;
+        }
+        
+        .input-field:focus {
+            outline: none;
+            border-color: #ffd700;
+            box-shadow: 0 0 0 2px rgba(255, 215, 0, 0.3);
+        }
+        
+        .send-btn {
+            background: linear-gradient(135deg, #1f6feb, #0969da);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        
+        .send-btn:hover {
+            background: linear-gradient(135deg, #0969da, #1f6feb);
+            transform: translateY(-1px);
+        }
+        
+        .status {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        
+        .status.running {
+            background: #1f6feb;
+            color: white;
+        }
+        
+        .status.completed {
+            background: #238636;
+            color: white;
+        }
+        
+        .status.error {
+            background: #da3633;
+            color: white;
+        }
+        
+        .file-info {
+            font-size: 11px;
+            color: #7d8590;
+            margin-left: auto;
+        }
+        
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #161b22;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #30363d;
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #484f58;
+        }
+    </style>
+</head>
+<body>
+    <div class="terminal-container">
+        <div class="terminal-header">
+            <div class="terminal-title">
+                <span>🐍</span>
+                Python Web Terminal
+            </div>
+            <div class="terminal-controls">
+                <button class="control-btn close"></button>
+                <button class="control-btn minimize"></button>
+                <button class="control-btn maximize"></button>
+            </div>
+        </div>
+        
+        <div class="terminal-info">
+            <span>📁 File: {{ABS_PATH}}</span>
+            <span class="file-info">Universal terminal - works with any Python script</span>
+        </div>
+        
+        <div class="terminal-output" id="output">
+            <div class="output-line info">Python Web Terminal v3.0 - Universal Edition</div>
+            <div class="output-line info">🌍 Works with ANY Python script - no modifications needed!</div>
+            <div class="output-line info">💡 When you see a prompt ending with : or ?, the input box will appear automatically</div>
+            <div class="output-line">──────────────────────────────────────────</div>
+        </div>
+        
+        <div class="execution-controls">
+            <div class="control-row">
+                <button class="run-btn" id="runBtn" onclick="executeScript()">
+                    ▶️ Run Script
+                </button>
+                <button class="clear-btn" onclick="clearOutput()">
+                    🗑️ Clear
+                </button>
+                <span class="status" id="status">Ready</span>
+                <div class="file-info">
+                    Universal execution of {{PYTHON_FILE}}
+                </div>
+            </div>
+            
+            <div class="input-section" id="inputSection">
+                <div class="input-label">💬 Python is waiting for your input:</div>
+                <div class="input-row">
+                    <input type="text" class="input-field" id="userInput" placeholder="Type your response and press Enter..." onkeypress="handleInputKeyPress(event)">
+                    <button class="send-btn" onclick="sendInput()">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws;
+        let isRunning = false;
+        let isWaitingForInput = false;
+        let lastOutputTime = 0;
+        let currentLine = "";
+        
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(protocol + '//' + window.location.host + '/ws');
+            
+            ws.onopen = function() {
+                addOutput('🔗 WebSocket connected - Ready for any Python script!', 'success');
+            };
+            
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                handleMessage(data);
+            };
+            
+            ws.onclose = function() {
+                addOutput('❌ WebSocket connection closed - Reconnecting...', 'stderr');
+                setTimeout(connectWebSocket, 3000);
+            };
+            
+            ws.onerror = function(error) {
+                addOutput('❌ WebSocket error: ' + error, 'stderr');
+            };
+        }
+        
+        function executeScript() {
+            if (isRunning || !ws || ws.readyState !== WebSocket.OPEN) return;
+            
+            isRunning = true;
+            isWaitingForInput = false;
+            currentLine = "";
+            lastOutputTime = Date.now();
+            document.getElementById('runBtn').disabled = true;
+            document.getElementById('status').textContent = 'Running';
+            document.getElementById('status').className = 'status running';
+            hideInputSection();
+            
+            addOutput('{{COMMAND_DISPLAY}}', 'command-line');
+            
+            ws.send(JSON.stringify({type: 'execute'}));
+        }
+        
+        function sendInput() {
+            const inputField = document.getElementById('userInput');
+            const inputValue = inputField.value.trim();
+            
+            if (!inputValue || !isWaitingForInput || !ws || ws.readyState !== WebSocket.OPEN) return;
+            
+            // Show the input in the terminal
+            addOutput('> ' + inputValue, 'input-prompt');
+            
+            // Send to Python process
+            ws.send(JSON.stringify({
+                type: 'input',
+                input: inputValue
+            }));
+            
+            // Clear input field
+            inputField.value = '';
+            isWaitingForInput = false;
+            hideInputSection();
+        }
+        
+        function handleInputKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendInput();
+            }
+        }
+        
+        function showInputSection() {
+            document.getElementById('inputSection').classList.add('show');
+            document.getElementById('userInput').focus();
+        }
+        
+        function hideInputSection() {
+            document.getElementById('inputSection').classList.remove('show');
+        }
+        
+        function handleMessage(data) {
+            const currentTime = Date.now();
+            
+            switch(data.type) {
+                case 'stdout':
+                    // Update current line
+                    currentLine += data.content;
+                    addOutput(data.content, 'stdout');
+                    lastOutputTime = currentTime;
+                    
+                    // Smart detection: Look for prompts that end with : or ?
+                    if (isRunning && !isWaitingForInput) {
+                        const trimmedLine = currentLine.trim();
+                        
+                        // Detect input prompts more reliably
+                        const isInputPrompt = 
+                            trimmedLine.endsWith(': ') ||
+                            trimmedLine.endsWith('? ') ||
+                            trimmedLine.endsWith(':') ||
+                            trimmedLine.endsWith('?');
+                        
+                        if (isInputPrompt && trimmedLine.length > 3) {
+                            console.log('🎯 Input prompt detected:', trimmedLine);
+                            setTimeout(() => {
+                                if (isRunning && !isWaitingForInput) {
+                                    isWaitingForInput = true;
+                                    showInputSection();
+                                }
+                            }, 100);
+                        }
+                        
+                        // Reset line on newline
+                        if (data.content.includes('\n')) {
+                            currentLine = "";
+                        }
+                    }
+                    break;
+                    
+                case 'stderr':
+                    addOutput(data.content, 'stderr');
+                    break;
+                    
+                case 'completed':
+                    addOutput('──────────────────────────────────────────', 'info');
+                    addOutput('✅ Script execution completed. ' + data.content, 'success');
+                    resetState();
+                    break;
+                    
+                case 'error':
+                    addOutput('❌ Error: ' + data.content, 'stderr');
+                    resetState();
+                    break;
+            }
+        }
+        
+        function resetState() {
+            isRunning = false;
+            isWaitingForInput = false;
+            currentLine = "";
+            document.getElementById('runBtn').disabled = false;
+            document.getElementById('status').textContent = 'Ready';
+            document.getElementById('status').className = 'status';
+            hideInputSection();
+        }
+        
+        function addOutput(text, className = 'stdout') {
+            const output = document.getElementById('output');
+            const line = document.createElement('div');
+            line.className = 'output-line ' + className;
+            line.textContent = text;
+            output.appendChild(line);
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        function clearOutput() {
+            const output = document.getElementById('output');
+            output.innerHTML = `
+                <div class="output-line info">Python Web Terminal v3.0 - Universal Edition</div>
+                <div class="output-line info">🌍 Works with ANY Python script - no modifications needed!</div>
+                <div class="output-line info">💡 When you see a prompt ending with : or ?, the input box will appear automatically</div>
+                <div class="output-line">──────────────────────────────────────────</div>
+            `;
+        }
+        
+        // Connect when page loads
+        window.onload = function() {
+            connectWebSocket();
+        };
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            if (ws) {
+                ws.close();
+            }
+        });
+    </script>
+</body>
+</html>
