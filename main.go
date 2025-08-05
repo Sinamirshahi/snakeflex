@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/gorilla/websocket"
 )
@@ -34,18 +35,67 @@ type Message struct {
 	Input   string `json:"input,omitempty"`
 }
 
-// Pseudo-terminal structures for Windows
-type winsize struct {
-	Row    uint16
-	Col    uint16
-	Xpixel uint16
-	Ypixel uint16
+// WebSocket connection wrapper with concurrency protection
+type SafeWebSocketConn struct {
+	conn   *websocket.Conn
+	mutex  sync.Mutex
+	msgChan chan Message
+	done   chan bool
+}
+
+func NewSafeWebSocketConn(conn *websocket.Conn) *SafeWebSocketConn {
+	safe := &SafeWebSocketConn{
+		conn:    conn,
+		msgChan: make(chan Message, 100), // Buffer to prevent blocking
+		done:    make(chan bool),
+	}
+	
+	// Start message sender goroutine
+	go safe.messageSender()
+	
+	return safe
+}
+
+func (s *SafeWebSocketConn) messageSender() {
+	for {
+		select {
+		case msg := <-s.msgChan:
+			s.mutex.Lock()
+			err := s.conn.WriteJSON(msg)
+			s.mutex.Unlock()
+			if err != nil {
+				log.Printf("Error sending message: %v", err)
+				return
+			}
+		case <-s.done:
+			return
+		}
+	}
+}
+
+func (s *SafeWebSocketConn) SendMessage(msg Message) {
+	select {
+	case s.msgChan <- msg:
+		// Message queued successfully
+	default:
+		// Channel full, drop message to prevent blocking
+		log.Printf("Message queue full, dropping message: %s", msg.Type)
+	}
+}
+
+func (s *SafeWebSocketConn) ReadJSON(v interface{}) error {
+	return s.conn.ReadJSON(v)
+}
+
+func (s *SafeWebSocketConn) Close() {
+	close(s.done)
+	s.conn.Close()
 }
 
 // detectPythonCommand detects the best Python command for the current OS
 func detectPythonCommand() (string, error) {
 	var candidateCommands []string
-
+	
 	switch runtime.GOOS {
 	case "windows":
 		candidateCommands = []string{"python", "python3", "py"}
@@ -56,7 +106,7 @@ func detectPythonCommand() (string, error) {
 	default:
 		candidateCommands = []string{"python3", "python"}
 	}
-
+	
 	for _, cmd := range candidateCommands {
 		if _, err := exec.LookPath(cmd); err == nil {
 			if verifyPython3(cmd) {
@@ -64,7 +114,7 @@ func detectPythonCommand() (string, error) {
 			}
 		}
 	}
-
+	
 	return "", fmt.Errorf("no suitable Python 3 interpreter found. Tried: %v", candidateCommands)
 }
 
@@ -74,7 +124,7 @@ func verifyPython3(pythonCmd string) bool {
 	if err != nil {
 		return false
 	}
-
+	
 	version := string(output)
 	return len(version) >= 8 && version[:8] == "Python 3"
 }
@@ -143,7 +193,7 @@ func (ts *TerminalServer) terminalHandler(w http.ResponseWriter, r *http.Request
 
 	absPath, _ := filepath.Abs(ts.pythonFile)
 	commandDisplay := fmt.Sprintf("%s %s", ts.pythonCmd, ts.pythonFile)
-
+	
 	htmlStr := string(htmlContent)
 	htmlStr = strings.ReplaceAll(htmlStr, "{{PYTHON_FILE}}", ts.pythonFile)
 	htmlStr = strings.ReplaceAll(htmlStr, "{{ABS_PATH}}", absPath)
@@ -159,7 +209,9 @@ func (ts *TerminalServer) websocketHandler(w http.ResponseWriter, r *http.Reques
 		log.Printf("WebSocket upgrade error: %v", err)
 		return
 	}
-	defer conn.Close()
+	
+	safeConn := NewSafeWebSocketConn(conn)
+	defer safeConn.Close()
 
 	if ts.verbose {
 		log.Printf("WebSocket connection established from %s", r.RemoteAddr)
@@ -167,7 +219,7 @@ func (ts *TerminalServer) websocketHandler(w http.ResponseWriter, r *http.Reques
 
 	for {
 		var msg Message
-		err := conn.ReadJSON(&msg)
+		err := safeConn.ReadJSON(&msg)
 		if err != nil {
 			if ts.verbose {
 				log.Printf("WebSocket read error: %v", err)
@@ -177,7 +229,7 @@ func (ts *TerminalServer) websocketHandler(w http.ResponseWriter, r *http.Reques
 
 		switch msg.Type {
 		case "execute":
-			ts.executePythonScript(conn)
+			go ts.executePythonScript(safeConn) // Run in separate goroutine
 		case "input":
 			if ts.verbose {
 				log.Printf("Received input: %s", msg.Input)
@@ -186,18 +238,17 @@ func (ts *TerminalServer) websocketHandler(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func (ts *TerminalServer) executePythonScript(conn *websocket.Conn) {
+func (ts *TerminalServer) executePythonScript(safeConn *SafeWebSocketConn) {
 	if runtime.GOOS == "windows" {
-		ts.executeWindowsScript(conn)
+		ts.executeWindowsScript(safeConn)
 	} else {
-		ts.executeUnixScript(conn)
+		ts.executeUnixScript(safeConn)
 	}
 }
 
-// Windows implementation (simplified - no real PTY support)
-func (ts *TerminalServer) executeWindowsScript(conn *websocket.Conn) {
-	cmd := exec.Command(ts.pythonCmd, "-u", ts.pythonFile) // -u for unbuffered
-
+func (ts *TerminalServer) executeWindowsScript(safeConn *SafeWebSocketConn) {
+	cmd := exec.Command(ts.pythonCmd, "-u", ts.pythonFile)
+	
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "PYTHONIOENCODING=utf-8")
 	cmd.Env = append(cmd.Env, "PYTHONUNBUFFERED=1")
@@ -205,43 +256,41 @@ func (ts *TerminalServer) executeWindowsScript(conn *websocket.Conn) {
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		ts.sendMessage(conn, Message{Type: "error", Content: fmt.Sprintf("Failed to create stdin pipe: %v", err)})
+		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to create stdin pipe: %v", err)})
 		return
 	}
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		ts.sendMessage(conn, Message{Type: "error", Content: fmt.Sprintf("Failed to create stdout pipe: %v", err)})
+		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to create stdout pipe: %v", err)})
 		return
 	}
 
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		ts.sendMessage(conn, Message{Type: "error", Content: fmt.Sprintf("Failed to create stderr pipe: %v", err)})
+		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to create stderr pipe: %v", err)})
 		return
 	}
 
 	if err := cmd.Start(); err != nil {
-		ts.sendMessage(conn, Message{Type: "error", Content: fmt.Sprintf("Failed to start command: %v", err)})
+		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to start command: %v", err)})
 		return
 	}
 
-	ts.handleIO(conn, stdin, stdout, stderr, cmd)
+	ts.handleIO(safeConn, stdin, stdout, stderr, cmd)
 }
 
-// Unix implementation with PTY support
-func (ts *TerminalServer) executeUnixScript(conn *websocket.Conn) {
+func (ts *TerminalServer) executeUnixScript(safeConn *SafeWebSocketConn) {
 	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
-		ts.executePTYScript(conn)
+		ts.executePTYScript(safeConn)
 	} else {
-		ts.executeWindowsScript(conn) // Fallback
+		ts.executeWindowsScript(safeConn)
 	}
 }
 
-func (ts *TerminalServer) executePTYScript(conn *websocket.Conn) {
-	// Try to use python -u for unbuffered output
+func (ts *TerminalServer) executePTYScript(safeConn *SafeWebSocketConn) {
 	cmd := exec.Command(ts.pythonCmd, "-u", ts.pythonFile)
-
+	
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "PYTHONIOENCODING=utf-8")
 	cmd.Env = append(cmd.Env, "PYTHONUNBUFFERED=1")
@@ -249,31 +298,31 @@ func (ts *TerminalServer) executePTYScript(conn *websocket.Conn) {
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		ts.sendMessage(conn, Message{Type: "error", Content: fmt.Sprintf("Failed to create stdin pipe: %v", err)})
+		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to create stdin pipe: %v", err)})
 		return
 	}
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		ts.sendMessage(conn, Message{Type: "error", Content: fmt.Sprintf("Failed to create stdout pipe: %v", err)})
+		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to create stdout pipe: %v", err)})
 		return
 	}
 
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		ts.sendMessage(conn, Message{Type: "error", Content: fmt.Sprintf("Failed to create stderr pipe: %v", err)})
+		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to create stderr pipe: %v", err)})
 		return
 	}
 
 	if err := cmd.Start(); err != nil {
-		ts.sendMessage(conn, Message{Type: "error", Content: fmt.Sprintf("Failed to start command: %v", err)})
+		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to start command: %v", err)})
 		return
 	}
 
-	ts.handleIO(conn, stdin, stdout, stderr, cmd)
+	ts.handleIO(safeConn, stdin, stdout, stderr, cmd)
 }
 
-func (ts *TerminalServer) handleIO(conn *websocket.Conn, stdin io.WriteCloser, stdout, stderr io.ReadCloser, cmd *exec.Cmd) {
+func (ts *TerminalServer) handleIO(safeConn *SafeWebSocketConn, stdin io.WriteCloser, stdout, stderr io.ReadCloser, cmd *exec.Cmd) {
 	done := make(chan bool)
 	inputChan := make(chan string, 10)
 
@@ -281,7 +330,7 @@ func (ts *TerminalServer) handleIO(conn *websocket.Conn, stdin io.WriteCloser, s
 	go func() {
 		for {
 			var msg Message
-			err := conn.ReadJSON(&msg)
+			err := safeConn.ReadJSON(&msg)
 			if err != nil {
 				return
 			}
@@ -302,45 +351,21 @@ func (ts *TerminalServer) handleIO(conn *websocket.Conn, stdin io.WriteCloser, s
 		}
 	}()
 
-	// Stream stdout character by character for real-time output
+	// Stream stdout line by line
 	go func() {
-		reader := bufio.NewReader(stdout)
-		var line []byte
-		for {
-			char, err := reader.ReadByte()
-			if err != nil {
-				if len(line) > 0 {
-					ts.sendMessage(conn, Message{Type: "stdout", Content: string(line)})
-				}
-				break
-			}
-
-			if char == '\n' {
-				// Send complete line
-				ts.sendMessage(conn, Message{Type: "stdout", Content: string(line)})
-				line = nil
-			} else if char == '\r' {
-				// Handle carriage return
-				continue
-			} else {
-				line = append(line, char)
-				// Send partial line for immediate feedback on prompts
-				if char == ':' || char == '?' {
-					if len(line) > 1 {
-						ts.sendMessage(conn, Message{Type: "stdout", Content: string(line)})
-						line = nil
-					}
-				}
-			}
+		scanner := bufio.NewScanner(stdout)
+		for scanner.Scan() {
+			line := scanner.Text()
+			safeConn.SendMessage(Message{Type: "stdout", Content: line})
 		}
 	}()
 
-	// Stream stderr
+	// Stream stderr line by line
 	go func() {
 		scanner := bufio.NewScanner(stderr)
 		for scanner.Scan() {
 			line := scanner.Text()
-			ts.sendMessage(conn, Message{Type: "stderr", Content: line})
+			safeConn.SendMessage(Message{Type: "stderr", Content: line})
 		}
 	}()
 
@@ -348,7 +373,7 @@ func (ts *TerminalServer) handleIO(conn *websocket.Conn, stdin io.WriteCloser, s
 	go func() {
 		defer close(done)
 		defer close(inputChan)
-
+		
 		err := cmd.Wait()
 		exitCode := 0
 		if err != nil {
@@ -359,7 +384,7 @@ func (ts *TerminalServer) handleIO(conn *websocket.Conn, stdin io.WriteCloser, s
 			}
 		}
 
-		ts.sendMessage(conn, Message{Type: "completed", Content: fmt.Sprintf("Exit code: %d", exitCode)})
+		safeConn.SendMessage(Message{Type: "completed", Content: fmt.Sprintf("Exit code: %d", exitCode)})
 
 		if ts.verbose {
 			log.Printf("Script execution completed with exit code: %d", exitCode)
@@ -367,12 +392,4 @@ func (ts *TerminalServer) handleIO(conn *websocket.Conn, stdin io.WriteCloser, s
 	}()
 
 	<-done
-}
-
-func (ts *TerminalServer) sendMessage(conn *websocket.Conn, msg Message) {
-	if err := conn.WriteJSON(msg); err != nil {
-		if ts.verbose {
-			log.Printf("Error sending message: %v", err)
-		}
-	}
 }
