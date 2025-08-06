@@ -448,7 +448,7 @@ func (ts *TerminalServer) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Parse multipart form
-	err := r.ParseMultipartForm(32 << 20) // 32MB max
+	err := r.ParseMultipartForm(500 << 20) // 500MB max
 	if err != nil {
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Failed to parse form: " + err.Error()})
 		return

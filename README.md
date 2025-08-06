@@ -390,7 +390,7 @@ Found a bug? Have an idea? Pull requests are welcome!
 * Very long-running scripts might timeout in some browsers
 * File I/O operations in Python scripts access the server's filesystem
 * Large output bursts are throttled to prevent WebSocket flooding
-* File uploads are limited to 32MB by default (Full Mode only)
+* File uploads are limited to 500MB by default (Full Mode only)
 * Hidden files and system directories (`.git`, `__pycache__`) are filtered from the file browser
 * Secure mode completely disables file management - no partial restrictions
 * Custom templates must be present at startup (embedded template used as fallback)
