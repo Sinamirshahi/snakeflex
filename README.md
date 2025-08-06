@@ -295,4 +295,4 @@ Inspired by the need for a complete, browser-based Python development environmen
 
 ---
 
-*Made with ❤️ and ☕ by developers who believe coding should be accessible and file management should be effortless.*
+*Made with ❤️ and ☕.*
