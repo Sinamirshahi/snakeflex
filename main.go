@@ -20,8 +20,6 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// Embed the HTML template at build time
-//
 //go:embed templates/terminal.html
 var embeddedTemplates embed.FS
 
@@ -43,6 +41,7 @@ type Message struct {
 	Type    string `json:"type"`
 	Content string `json:"content,omitempty"`
 	Input   string `json:"input,omitempty"`
+	File    string `json:"file,omitempty"`
 }
 
 type FileInfo struct {
@@ -60,7 +59,6 @@ type APIResponse struct {
 	Data    interface{} `json:"data,omitempty"`
 }
 
-// WebSocket connection wrapper with concurrency protection
 type SafeWebSocketConn struct {
 	conn    *websocket.Conn
 	mutex   sync.Mutex
@@ -113,7 +111,6 @@ func (s *SafeWebSocketConn) Close() {
 	s.conn.Close()
 }
 
-// detectPythonCommand detects the best Python command for the current OS
 func detectPythonCommand() (string, error) {
 	var candidateCommands []string
 
@@ -150,7 +147,6 @@ func verifyPython3(pythonCmd string) bool {
 	return len(version) >= 8 && version[:8] == "Python 3"
 }
 
-// File management functions
 func (ts *TerminalServer) getDirectoryTree(dirPath string) ([]FileInfo, error) {
 	var files []FileInfo
 
@@ -160,7 +156,6 @@ func (ts *TerminalServer) getDirectoryTree(dirPath string) ([]FileInfo, error) {
 	}
 
 	for _, entry := range entries {
-		// Skip hidden files and common directories to ignore
 		if strings.HasPrefix(entry.Name(), ".") ||
 			entry.Name() == "__pycache__" ||
 			entry.Name() == "node_modules" {
@@ -186,7 +181,6 @@ func (ts *TerminalServer) getDirectoryTree(dirPath string) ([]FileInfo, error) {
 		files = append(files, fileInfo)
 	}
 
-	// Sort: directories first, then files, both alphabetically
 	sort.Slice(files, func(i, j int) bool {
 		if files[i].IsDir != files[j].IsDir {
 			return files[i].IsDir
@@ -197,9 +191,7 @@ func (ts *TerminalServer) getDirectoryTree(dirPath string) ([]FileInfo, error) {
 	return files, nil
 }
 
-// getHTMLContent returns the HTML content with smart fallback logic
 func (ts *TerminalServer) getHTMLContent(htmlFile string) (string, bool) {
-	// Priority 1: Try external custom template file
 	if htmlContent, err := os.ReadFile(htmlFile); err == nil {
 		if ts.verbose {
 			log.Printf("✅ Using external template: %s", htmlFile)
@@ -207,7 +199,6 @@ func (ts *TerminalServer) getHTMLContent(htmlFile string) (string, bool) {
 		return string(htmlContent), false
 	}
 
-	// Priority 2: Try embedded template
 	if embeddedContent, err := embeddedTemplates.ReadFile("templates/terminal.html"); err == nil {
 		if ts.verbose {
 			log.Printf("💾 External template '%s' not found, using embedded template", htmlFile)
@@ -215,58 +206,37 @@ func (ts *TerminalServer) getHTMLContent(htmlFile string) (string, bool) {
 		return string(embeddedContent), true
 	}
 
-	// Priority 3: Fallback error (should never happen if templates are properly embedded)
 	if ts.verbose {
 		log.Printf("❌ No templates available - this should not happen!")
 	}
 	return generateMinimalHTML(), true
 }
 
-// generateMinimalHTML creates a basic HTML template as absolute last resort
 func generateMinimalHTML() string {
-	return `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Python Terminal - Minimal Mode</title>
-    <style>
-        body { background: #1e1e1e; color: #d4d4d4; font-family: monospace; padding: 20px; }
-        .error { color: #f48771; font-weight: bold; }
-        .info { color: #569cd6; }
-    </style>
-</head>
-<body>
-    <div class="error">⚠️  Template Loading Error</div>
-    <div class="info">The application is running in minimal mode.</div>
-    <div class="info">Please check your template files and rebuild.</div>
-    <div class="info">Python file: {{PYTHON_FILE}}</div>
-    <div class="info">Working directory: {{WORKING_DIR}}</div>
-</body>
-</html>`
+	return `<!DOCTYPE html><html lang="en"><head><title>Python Terminal - Error</title></head><body>Error: Template not found.</body></html>`
 }
 
 func main() {
-	pythonFile := flag.String("file", "fibonacci.py", "Python file to execute")
+	pythonFile := flag.String("file", "", "Python file to execute (optional)")
 	port := flag.String("port", "8090", "Port to run server on")
 	verbose := flag.Bool("verbose", false, "Enable verbose logging")
 	htmlFile := flag.String("template", "terminal.html", "HTML template file (will use embedded if not found)")
 	disableFileManager := flag.Bool("disable-file-manager", false, "Disable file management features for security")
 	flag.Parse()
 
-	// Get working directory
 	workingDir, err := os.Getwd()
 	if err != nil {
 		fmt.Printf("Error getting working directory: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Check if Python file exists
-	if _, err := os.Stat(*pythonFile); os.IsNotExist(err) {
-		fmt.Printf("Error: Python file '%s' not found\n", *pythonFile)
-		os.Exit(1)
+	if *pythonFile != "" {
+		if _, err := os.Stat(*pythonFile); os.IsNotExist(err) {
+			fmt.Printf("Error: Python file '%s' not found\n", *pythonFile)
+			os.Exit(1)
+		}
 	}
 
-	// Detect Python command
 	pythonCmd, err := detectPythonCommand()
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
@@ -287,13 +257,11 @@ func main() {
 		fileManagerEnabled: !*disableFileManager,
 	}
 
-	// Setup routes
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		server.terminalHandler(w, r, *htmlFile)
 	})
 	http.HandleFunc("/ws", server.websocketHandler)
 
-	// Conditionally setup file management API routes
 	if server.fileManagerEnabled {
 		http.HandleFunc("/api/files", server.filesHandler)
 		http.HandleFunc("/api/files/download", server.downloadHandler)
@@ -305,14 +273,14 @@ func main() {
 	serverPort := ":" + *port
 	fmt.Printf("🐍 Python Web Terminal started at http://localhost%s\n", serverPort)
 	fmt.Printf("📁 Working Directory: %s\n", workingDir)
-	fmt.Printf("🚀 Executing: %s\n", *pythonFile)
-	fmt.Printf("🎨 Template: %s (embedded fallback available)\n", *htmlFile)
-
+	if *pythonFile != "" {
+		fmt.Printf("🚀 Initial script: %s\n", *pythonFile)
+	} else {
+		fmt.Printf("🚀 No initial script specified. Select a file from the UI to run.\n")
+	}
 	if *verbose {
 		fmt.Println("📝 Verbose logging enabled")
 	}
-	fmt.Println("💬 Interactive input support enabled!")
-
 	if server.fileManagerEnabled {
 		fmt.Println("📂 File management panel enabled!")
 	} else {
@@ -327,17 +295,11 @@ func main() {
 func (ts *TerminalServer) terminalHandler(w http.ResponseWriter, r *http.Request, htmlFile string) {
 	htmlContent, isEmbedded := ts.getHTMLContent(htmlFile)
 
-	absPath, _ := filepath.Abs(ts.pythonFile)
-	commandDisplay := fmt.Sprintf("%s %s", ts.pythonCmd, ts.pythonFile)
-
 	htmlStr := htmlContent
-	htmlStr = strings.ReplaceAll(htmlStr, "{{PYTHON_FILE}}", ts.pythonFile)
-	htmlStr = strings.ReplaceAll(htmlStr, "{{ABS_PATH}}", absPath)
-	htmlStr = strings.ReplaceAll(htmlStr, "{{COMMAND_DISPLAY}}", commandDisplay)
+	htmlStr = strings.ReplaceAll(htmlStr, "{{INITIAL_PYTHON_FILE}}", ts.pythonFile)
 	htmlStr = strings.ReplaceAll(htmlStr, "{{WORKING_DIR}}", ts.workingDir)
 	htmlStr = strings.ReplaceAll(htmlStr, "{{FILE_MANAGER_ENABLED}}", fmt.Sprintf("%t", ts.fileManagerEnabled))
 
-	// Show embedded notice if using embedded template
 	if isEmbedded {
 		htmlStr = strings.ReplaceAll(htmlStr, `id="embeddedNotice" style="display: none;"`, `id="embeddedNotice"`)
 	}
@@ -346,16 +308,12 @@ func (ts *TerminalServer) terminalHandler(w http.ResponseWriter, r *http.Request
 	fmt.Fprint(w, htmlStr)
 }
 
-// File management handlers - these will only be called if file manager is enabled
 func (ts *TerminalServer) filesHandler(w http.ResponseWriter, r *http.Request) {
-	// Security check: ensure file manager is enabled
 	if !ts.fileManagerEnabled {
 		http.Error(w, "File management disabled", http.StatusForbidden)
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
-
 	switch r.Method {
 	case "GET":
 		dirPath := r.URL.Query().Get("path")
@@ -364,20 +322,16 @@ func (ts *TerminalServer) filesHandler(w http.ResponseWriter, r *http.Request) {
 		} else {
 			dirPath = filepath.Join(ts.workingDir, dirPath)
 		}
-
-		// Security check: ensure path is within working directory
 		absDir, err := filepath.Abs(dirPath)
 		if err != nil || !strings.HasPrefix(absDir, ts.workingDir) {
 			json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Invalid path"})
 			return
 		}
-
 		files, err := ts.getDirectoryTree(dirPath)
 		if err != nil {
 			json.NewEncoder(w).Encode(APIResponse{Success: false, Message: err.Error()})
 			return
 		}
-
 		json.NewEncoder(w).Encode(APIResponse{Success: true, Data: files})
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -385,231 +339,167 @@ func (ts *TerminalServer) filesHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ts *TerminalServer) downloadHandler(w http.ResponseWriter, r *http.Request) {
-	// Security check: ensure file manager is enabled
 	if !ts.fileManagerEnabled {
 		http.Error(w, "File management disabled", http.StatusForbidden)
 		return
 	}
-
 	if r.Method != "GET" {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
 	filePath := r.URL.Query().Get("path")
 	if filePath == "" {
 		http.Error(w, "Path parameter required", http.StatusBadRequest)
 		return
 	}
-
 	fullPath := filepath.Join(ts.workingDir, filePath)
-
-	// Security check
 	absPath, err := filepath.Abs(fullPath)
 	if err != nil || !strings.HasPrefix(absPath, ts.workingDir) {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
-
-	// Check if file exists and is not a directory
 	info, err := os.Stat(absPath)
 	if err != nil {
 		http.Error(w, "File not found", http.StatusNotFound)
 		return
 	}
-
 	if info.IsDir() {
 		http.Error(w, "Cannot download directory", http.StatusBadRequest)
 		return
 	}
-
-	// Set headers for file download
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filepath.Base(filePath)))
 	w.Header().Set("Content-Type", "application/octet-stream")
-
-	// Serve the file
 	http.ServeFile(w, r, absPath)
 }
 
 func (ts *TerminalServer) uploadHandler(w http.ResponseWriter, r *http.Request) {
-	// Security check: ensure file manager is enabled
 	if !ts.fileManagerEnabled {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "File management disabled"})
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
-
 	if r.Method != "POST" {
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Method not allowed"})
 		return
 	}
-
-	// Parse multipart form
-	err := r.ParseMultipartForm(500 << 20) // 500MB max
+	err := r.ParseMultipartForm(500 << 20)
 	if err != nil {
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Failed to parse form: " + err.Error()})
 		return
 	}
-
 	uploadPath := r.FormValue("path")
 	if uploadPath == "" {
 		uploadPath = "."
 	}
-
 	targetDir := filepath.Join(ts.workingDir, uploadPath)
-
-	// Security check
 	absDir, err := filepath.Abs(targetDir)
 	if err != nil || !strings.HasPrefix(absDir, ts.workingDir) {
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Invalid path"})
 		return
 	}
-
 	files := r.MultipartForm.File["files"]
 	if len(files) == 0 {
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "No files uploaded"})
 		return
 	}
-
 	uploadedFiles := []string{}
-
 	for _, fileHeader := range files {
 		file, err := fileHeader.Open()
 		if err != nil {
 			continue
 		}
 		defer file.Close()
-
-		// Create the target file
 		targetPath := filepath.Join(absDir, fileHeader.Filename)
 		targetFile, err := os.Create(targetPath)
 		if err != nil {
 			continue
 		}
 		defer targetFile.Close()
-
-		// Copy file content
 		_, err = io.Copy(targetFile, file)
 		if err != nil {
-			os.Remove(targetPath) // Clean up on error
+			os.Remove(targetPath)
 			continue
 		}
-
 		uploadedFiles = append(uploadedFiles, fileHeader.Filename)
 	}
-
 	if len(uploadedFiles) == 0 {
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Failed to upload any files"})
 		return
 	}
-
 	json.NewEncoder(w).Encode(APIResponse{Success: true, Message: fmt.Sprintf("Uploaded %d file(s)", len(uploadedFiles)), Data: uploadedFiles})
 }
 
 func (ts *TerminalServer) createHandler(w http.ResponseWriter, r *http.Request) {
-	// Security check: ensure file manager is enabled
 	if !ts.fileManagerEnabled {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "File management disabled"})
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
-
 	if r.Method != "POST" {
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Method not allowed"})
 		return
 	}
-
 	var req struct {
 		Path  string `json:"path"`
 		IsDir bool   `json:"isDir"`
 	}
-
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Invalid request body"})
 		return
 	}
-
 	targetPath := filepath.Join(ts.workingDir, req.Path)
-
-	// Security check
 	absPath, err := filepath.Abs(targetPath)
 	if err != nil || !strings.HasPrefix(absPath, ts.workingDir) {
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Invalid path"})
 		return
 	}
-
 	if req.IsDir {
 		err = os.MkdirAll(absPath, 0755)
 	} else {
-		// Create empty file
-		file, err := os.Create(absPath)
-		if err == nil {
+		file, errCreate := os.Create(absPath)
+		if errCreate == nil {
 			file.Close()
 		}
+		err = errCreate
 	}
-
 	if err != nil {
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: err.Error()})
 		return
 	}
-
 	json.NewEncoder(w).Encode(APIResponse{Success: true, Message: "Created successfully"})
 }
 
 func (ts *TerminalServer) deleteHandler(w http.ResponseWriter, r *http.Request) {
-	// Security check: ensure file manager is enabled
 	if !ts.fileManagerEnabled {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "File management disabled"})
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
-
 	if r.Method != "DELETE" {
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Method not allowed"})
 		return
 	}
-
 	filePath := r.URL.Query().Get("path")
 	if filePath == "" {
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Path parameter required"})
 		return
 	}
-
 	targetPath := filepath.Join(ts.workingDir, filePath)
-
-	// Security check
 	absPath, err := filepath.Abs(targetPath)
 	if err != nil || !strings.HasPrefix(absPath, ts.workingDir) {
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Invalid path"})
 		return
 	}
-
-	// Don't allow deleting the current Python file
-	if absPath == filepath.Join(ts.workingDir, ts.pythonFile) {
-		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Cannot delete the currently executing Python file"})
-		return
-	}
-
 	err = os.RemoveAll(absPath)
 	if err != nil {
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: err.Error()})
 		return
 	}
-
 	json.NewEncoder(w).Encode(APIResponse{Success: true, Message: "Deleted successfully"})
 }
-
-//
-// ────────────────────────────────────────────────────────────────────────────────
-//  WebSocket handler – now feeds a single inputChan
-// ────────────────────────────────────────────────────────────────────────────────
-//
 
 func (ts *TerminalServer) websocketHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -617,7 +507,6 @@ func (ts *TerminalServer) websocketHandler(w http.ResponseWriter, r *http.Reques
 		log.Printf("WebSocket upgrade error: %v", err)
 		return
 	}
-
 	safeConn := NewSafeWebSocketConn(conn)
 	defer safeConn.Close()
 
@@ -625,7 +514,9 @@ func (ts *TerminalServer) websocketHandler(w http.ResponseWriter, r *http.Reques
 		log.Printf("WebSocket connection established from %s", r.RemoteAddr)
 	}
 
-	inputChan := make(chan string, 10)
+	// ✅ FIX: State for the current input channel is managed here, per connection.
+	var currentInputChan chan string
+	var chanMutex sync.Mutex
 
 	for {
 		var msg Message
@@ -639,33 +530,65 @@ func (ts *TerminalServer) websocketHandler(w http.ResponseWriter, r *http.Reques
 
 		switch msg.Type {
 		case "execute":
-			go ts.executePythonScript(safeConn, inputChan) // pass channel
+			// ✅ FIX: Create a NEW channel for each execution.
+			newChan := make(chan string, 10)
+
+			// ✅ FIX: Safely swap the active channel.
+			chanMutex.Lock()
+			currentInputChan = newChan
+			chanMutex.Unlock()
+
+			// ✅ FIX: Pass the new, single-use channel to the execution goroutine.
+			go ts.executePythonScript(safeConn, newChan, msg.File)
+
 		case "input":
-			if ts.verbose {
-				log.Printf("Received input: %s", msg.Input)
+			// ✅ FIX: Safely get the current channel.
+			chanMutex.Lock()
+			targetChan := currentInputChan
+			chanMutex.Unlock()
+
+			// ✅ FIX: Send input to the currently active channel.
+			if targetChan != nil {
+				if ts.verbose {
+					log.Printf("Received input: %s", msg.Input)
+				}
+				targetChan <- msg.Input + "\n"
 			}
-			inputChan <- msg.Input + "\n"
 		}
 	}
 }
 
-//
-// ────────────────────────────────────────────────────────────────────────────────
-//  Execution wrappers – now accept inputChan
-// ────────────────────────────────────────────────────────────────────────────────
-//
+func (ts *TerminalServer) executePythonScript(safeConn *SafeWebSocketConn, inputChan chan string, pythonFile string) {
+	// --- Security Check ---
+	if pythonFile == "" {
+		safeConn.SendMessage(Message{Type: "error", Content: "No Python file specified for execution."})
+		close(inputChan)
+		return
+	}
 
-func (ts *TerminalServer) executePythonScript(safeConn *SafeWebSocketConn, inputChan chan string) {
+	targetPath := filepath.Join(ts.workingDir, filepath.Clean(pythonFile))
+	absPath, err := filepath.Abs(targetPath)
+	if err != nil || !strings.HasPrefix(absPath, ts.workingDir) {
+		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Invalid or forbidden file path: %s", pythonFile)})
+		close(inputChan)
+		return
+	}
+	if _, err := os.Stat(absPath); os.IsNotExist(err) {
+		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("File not found: %s", pythonFile)})
+		close(inputChan)
+		return
+	}
+	// --- End Security Check ---
+
 	if runtime.GOOS == "windows" {
-		ts.executeWindowsScript(safeConn, inputChan)
+		ts.executeWindowsScript(safeConn, inputChan, absPath)
 	} else {
-		ts.executeUnixScript(safeConn, inputChan)
+		ts.executeUnixScript(safeConn, inputChan, absPath)
 	}
 }
 
-func (ts *TerminalServer) executeWindowsScript(safeConn *SafeWebSocketConn, inputChan chan string) {
-	cmd := exec.Command(ts.pythonCmd, "-u", ts.pythonFile)
-
+func (ts *TerminalServer) executeWindowsScript(safeConn *SafeWebSocketConn, inputChan chan string, scriptPath string) {
+	cmd := exec.Command(ts.pythonCmd, "-u", scriptPath)
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "PYTHONIOENCODING=utf-8", "PYTHONUNBUFFERED=1", "PYTHONUTF8=1")
 
@@ -674,38 +597,33 @@ func (ts *TerminalServer) executeWindowsScript(safeConn *SafeWebSocketConn, inpu
 		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to create stdin pipe: %v", err)})
 		return
 	}
-
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to create stdout pipe: %v", err)})
 		return
 	}
-
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to create stderr pipe: %v", err)})
 		return
 	}
-
 	if err := cmd.Start(); err != nil {
 		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to start command: %v", err)})
 		return
 	}
-
 	ts.handleIO(safeConn, stdin, stdout, stderr, cmd, inputChan)
 }
 
-func (ts *TerminalServer) executeUnixScript(safeConn *SafeWebSocketConn, inputChan chan string) {
+func (ts *TerminalServer) executeUnixScript(safeConn *SafeWebSocketConn, inputChan chan string, scriptPath string) {
 	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
-		ts.executePTYScript(safeConn, inputChan)
+		ts.executePTYScript(safeConn, inputChan, scriptPath)
 	} else {
-		ts.executeWindowsScript(safeConn, inputChan)
+		ts.executeWindowsScript(safeConn, inputChan, scriptPath)
 	}
 }
 
-func (ts *TerminalServer) executePTYScript(safeConn *SafeWebSocketConn, inputChan chan string) {
-	cmd := exec.Command(ts.pythonCmd, "-u", ts.pythonFile)
-
+func (ts *TerminalServer) executePTYScript(safeConn *SafeWebSocketConn, inputChan chan string, scriptPath string) {
+	cmd := exec.Command(ts.pythonCmd, "-u", scriptPath)
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "PYTHONIOENCODING=utf-8", "PYTHONUNBUFFERED=1", "TERM=xterm-256color")
 
@@ -714,37 +632,25 @@ func (ts *TerminalServer) executePTYScript(safeConn *SafeWebSocketConn, inputCha
 		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to create stdin pipe: %v", err)})
 		return
 	}
-
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to create stdout pipe: %v", err)})
 		return
 	}
-
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to create stderr pipe: %v", err)})
 		return
 	}
-
 	if err := cmd.Start(); err != nil {
 		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to start command: %v", err)})
 		return
 	}
-
 	ts.handleIO(safeConn, stdin, stdout, stderr, cmd, inputChan)
 }
 
-//
-// ────────────────────────────────────────────────────────────────────────────────
-//  handleIO – consumes inputChan, no duplicate reader, no extra newlines
-// ────────────────────────────────────────────────────────────────────────────────
-//
-
 func (ts *TerminalServer) handleIO(safeConn *SafeWebSocketConn, stdin io.WriteCloser, stdout, stderr io.ReadCloser, cmd *exec.Cmd, inputChan chan string) {
 	done := make(chan bool)
-
-	// Forward user input to Python process
 	go func() {
 		defer stdin.Close()
 		for input := range inputChan {
@@ -755,37 +661,36 @@ func (ts *TerminalServer) handleIO(safeConn *SafeWebSocketConn, stdin io.WriteCl
 		}
 	}()
 
-	// Stream stdout as it comes in, without line buffering
 	go func() {
-		buffer := make([]byte, 1024) // Reusable buffer
+		buffer := make([]byte, 1024)
 		for {
 			n, err := stdout.Read(buffer)
 			if n > 0 {
 				safeConn.SendMessage(Message{Type: "stdout", Content: string(buffer[:n])})
 			}
-			if err != nil { // This will catch io.EOF and other errors
+			if err != nil {
 				break
 			}
 		}
 	}()
 
-	// Stream stderr as it comes in, without line buffering
 	go func() {
-		buffer := make([]byte, 1024) // Reusable buffer
+		buffer := make([]byte, 1024)
 		for {
 			n, err := stderr.Read(buffer)
 			if n > 0 {
 				safeConn.SendMessage(Message{Type: "stderr", Content: string(buffer[:n])})
 			}
-			if err != nil { // This will catch io.EOF and other errors
+			if err != nil {
 				break
 			}
 		}
 	}()
 
-	// Wait for command to complete
 	go func() {
 		defer close(done)
+		// This defer is critical. It ensures that the channel for THIS execution
+		// is closed when the script finishes, allowing the stdin goroutine to unblock and exit.
 		defer close(inputChan)
 
 		err := cmd.Wait()
@@ -797,9 +702,7 @@ func (ts *TerminalServer) handleIO(safeConn *SafeWebSocketConn, stdin io.WriteCl
 				exitCode = -1
 			}
 		}
-
 		safeConn.SendMessage(Message{Type: "completed", Content: fmt.Sprintf("Exit code: %d", exitCode)})
-
 		if ts.verbose {
 			log.Printf("Script execution completed with exit code: %d", exitCode)
 		}

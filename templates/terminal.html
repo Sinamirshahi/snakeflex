@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Python Web Terminal with File Manager - {{PYTHON_FILE}}</title>
+    <title>Python Web Terminal</title>
     <style>
         * {
             margin: 0;
@@ -277,11 +277,6 @@
             font-weight: bold;
         }
         
-        .command-line::before {
-            content: "$ ";
-            color: #7c3aed;
-        }
-        
         .output-line {
             margin: 2px 0;
             white-space: pre-wrap;
@@ -376,23 +371,6 @@
             transform: translateY(-1px);
         }
         
-        .refresh-btn {
-            background: linear-gradient(135deg, #0969da, #1f6feb);
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: bold;
-            transition: all 0.2s;
-        }
-        
-        .refresh-btn:hover {
-            background: linear-gradient(135deg, #1f6feb, #0969da);
-            transform: translateY(-1px);
-        }
-        
         .input-section {
             display: none;
             flex-direction: column;
@@ -409,14 +387,8 @@
         }
         
         @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         
         .input-label {
@@ -457,12 +429,6 @@
             cursor: pointer;
             font-size: 14px;
             font-weight: bold;
-            transition: all 0.2s;
-        }
-        
-        .send-btn:hover {
-            background: linear-gradient(135deg, #0969da, #1f6feb);
-            transform: translateY(-1px);
         }
         
         .status {
@@ -472,26 +438,10 @@
             font-weight: bold;
         }
         
-        .status.running {
-            background: #1f6feb;
-            color: white;
-        }
-        
-        .status.waiting-input {
-            background: #ff9500;
-            color: white;
-            animation: pulse 1.5s infinite;
-        }
-        
-        .status.completed {
-            background: #238636;
-            color: white;
-        }
-        
-        .status.error {
-            background: #da3633;
-            color: white;
-        }
+        .status.running { background: #1f6feb; color: white; }
+        .status.waiting-input { background: #ff9500; color: white; animation: pulse 1.5s infinite; }
+        .status.completed { background: #238636; color: white; }
+        .status.error { background: #da3633; color: white; }
         
         .file-info {
             font-size: 11px;
@@ -499,7 +449,11 @@
             margin-left: auto;
         }
         
-        /* Context Menu */
+        .file-info .active-script {
+            color: #56d364;
+            font-weight: bold;
+        }
+
         .context-menu {
             position: absolute;
             background: #21262d;
@@ -512,137 +466,27 @@
             box-shadow: 0 4px 12px rgba(0,0,0,0.4);
         }
         
-        .context-menu-item {
-            padding: 8px 12px;
-            cursor: pointer;
-            font-size: 12px;
-        }
+        .context-menu-item { padding: 8px 12px; cursor: pointer; font-size: 12px; }
+        .context-menu-item:hover { background: rgba(177, 186, 196, 0.12); }
+        .context-menu-separator { height: 1px; background: #30363d; margin: 4px 0; }
         
-        .context-menu-item:hover {
-            background: rgba(177, 186, 196, 0.12);
-        }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 2000; }
+        .modal-content { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #21262d; border: 1px solid #30363d; border-radius: 8px; padding: 20px; min-width: 300px; }
+        .modal-title { font-size: 16px; font-weight: bold; margin-bottom: 15px; }
+        .modal-input { width: 100%; background: #0d1117; border: 1px solid #30363d; border-radius: 4px; padding: 8px 12px; color: #c9d1d9; font-family: inherit; margin-bottom: 15px; }
+        .modal-input:focus { outline: none; border-color: #1f6feb; }
+        .modal-buttons { display: flex; gap: 8px; justify-content: flex-end; }
+        .modal-btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; }
+        .modal-btn.primary { background: #238636; color: white; }
+        .modal-btn.primary:hover { background: #2ea043; }
+        .modal-btn.secondary { background: #6e7681; color: white; }
+        .modal-btn.secondary:hover { background: #7d8590; }
         
-        .context-menu-separator {
-            height: 1px;
-            background: #30363d;
-            margin: 4px 0;
-        }
-        
-        /* Modal for create file/folder */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.6);
-            z-index: 2000;
-        }
-        
-        .modal-content {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: #21262d;
-            border: 1px solid #30363d;
-            border-radius: 8px;
-            padding: 20px;
-            min-width: 300px;
-        }
-        
-        .modal-title {
-            font-size: 16px;
-            font-weight: bold;
-            margin-bottom: 15px;
-        }
-        
-        .modal-input {
-            width: 100%;
-            background: #0d1117;
-            border: 1px solid #30363d;
-            border-radius: 4px;
-            padding: 8px 12px;
-            color: #c9d1d9;
-            font-family: inherit;
-            margin-bottom: 15px;
-        }
-        
-        .modal-input:focus {
-            outline: none;
-            border-color: #1f6feb;
-        }
-        
-        .modal-buttons {
-            display: flex;
-            gap: 8px;
-            justify-content: flex-end;
-        }
-        
-        .modal-btn {
-            padding: 8px 16px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: bold;
-        }
-        
-        .modal-btn.primary {
-            background: #238636;
-            color: white;
-        }
-        
-        .modal-btn.primary:hover {
-            background: #2ea043;
-        }
-        
-        .modal-btn.secondary {
-            background: #6e7681;
-            color: white;
-        }
-        
-        .modal-btn.secondary:hover {
-            background: #7d8590;
-        }
-        
-        .hidden {
-            display: none !important;
-        }
-        
-        /* Scrollbar styling */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-        
-        ::-webkit-scrollbar-track {
-            background: #161b22;
-        }
-        
-        ::-webkit-scrollbar-thumb {
-            background: #30363d;
-            border-radius: 4px;
-        }
-        
-        ::-webkit-scrollbar-thumb:hover {
-            background: #484f58;
-        }
-        
-        /* Loading spinner */
-        .loading {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border: 2px solid #30363d;
-            border-radius: 50%;
-            border-top-color: #1f6feb;
-            animation: spin 1s ease-in-out infinite;
-        }
-        
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
+        .hidden { display: none !important; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #161b22; }
+        ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #484f58; }
     </style>
 </head>
 <body>
@@ -668,62 +512,44 @@
                 <div class="sidebar-header">
                     <span>📁</span>
                     Files
-                    <button class="refresh-btn" onclick="refreshFiles()" style="margin-left: auto; padding: 4px 8px; font-size: 10px;">
+                    <button class="refresh-btn" onclick="refreshFiles()" style="margin-left: auto; padding: 4px 8px; font-size: 10px; border:none; background: #30363d; border-radius: 4px;">
                         🔄
                     </button>
                 </div>
-                
-                <div class="files-container" id="filesContainer">
-                    <div class="loading" style="margin: 20px auto;"></div>
-                </div>
-                
+                <div class="files-container" id="filesContainer"></div>
                 <div class="sidebar-footer">
                     <div class="upload-area" id="uploadArea">
-                        <div>📁 Drop files here to upload</div>
-                        <div>or click to select files</div>
+                        <div>📁 Drop files here or click to upload</div>
                         <div class="upload-buttons">
-                            <button class="upload-btn" onclick="selectFiles()">📄 Upload Files</button>
+                            <button class="upload-btn" onclick="document.getElementById('fileInput').click()">📄 Files</button>
                             <button class="create-btn" onclick="showCreateModal('file')">+ File</button>
                             <button class="create-btn" onclick="showCreateModal('folder')">+ Folder</button>
                         </div>
                     </div>
                 </div>
-                
                 <div class="resize-handle" id="resizeHandle"></div>
             </div>
             
             <div class="terminal-container">
-                <div class="terminal-info" id="terminalInfo">
+                <div class="terminal-info">
                     <span>📁 Working Directory: {{WORKING_DIR}}</span>
-                    <span class="file-info" id="modeInfo">File Manager + Terminal - Universal Python execution</span>
                 </div>
                 
-                <div class="terminal-output" id="output">
-                    <div class="output-line info" id="welcomeTitle">Python Web Terminal v4.0 - File Manager Edition</div>
-                    <div class="output-line info" id="welcomeFileManager">📂 Browse, upload, download, and manage files in the left panel</div>
-                    <div class="output-line info">🌍 Works with ANY Python script - no modifications needed!</div>
-                    <div class="output-line info">💡 Nerds save the world!</div>
-                    <div class="output-line">──────────────────────────────────────────</div>
-                </div>
+                <div class="terminal-output" id="output"></div>
                 
                 <div class="execution-controls">
                     <div class="control-row">
-                        <button class="run-btn" id="runBtn" onclick="executeScript()">
-                            ▶️ Run Script
-                        </button>
-                        <button class="clear-btn" onclick="clearOutput()">
-                            🗑️ Clear
-                        </button>
+                        <button class="run-btn" id="runBtn" onclick="executeScript()">▶️ Run Script</button>
+                        <button class="clear-btn" onclick="clearOutput()">🗑️ Clear</button>
                         <span class="status" id="status">Ready</span>
-                        <div class="file-info">
-                            Executing: {{PYTHON_FILE}}
+                        <div class="file-info" id="executingFileDisplay">
+                            Executing: <span id="activeScript" class="active-script">None</span>
                         </div>
                     </div>
-                    
                     <div class="input-section" id="inputSection">
                         <div class="input-label">💬 Python is waiting for your input:</div>
                         <div class="input-row">
-                            <input type="text" class="input-field" id="userInput" placeholder="Type your response and press Enter..." onkeypress="handleInputKeyPress(event)">
+                            <input type="text" class="input-field" id="userInput" placeholder="Type and press Enter..." onkeypress="handleInputKeyPress(event)">
                             <button class="send-btn" onclick="sendInput()">Send</button>
                         </div>
                     </div>
@@ -735,8 +561,9 @@
     <input type="file" id="fileInput" multiple style="display: none;" onchange="uploadFiles()">
     
     <div class="context-menu" id="contextMenu">
+        <div class="context-menu-item" id="contextMenuSetExec" onclick="setExecutable()">▶️ Set as Executable</div>
+        <div class="context-menu-separator" id="contextMenuSeparator"></div>
         <div class="context-menu-item" onclick="downloadFile()">📥 Download</div>
-        <div class="context-menu-separator"></div>
         <div class="context-menu-item" onclick="deleteFile()">🗑️ Delete</div>
     </div>
     
@@ -761,104 +588,41 @@
         let isResizing = false;
         let createType = 'file';
         let inputDetectionTimeout = null;
-        let inputDetectionCount = 0;
-
-        // ✅ NEW: Global variable to track the last output element for streaming
         let lastLineElement = null;
-        
-        // Read file manager enabled status from template
+        let executableFile = '{{INITIAL_PYTHON_FILE}}';
         const fileManagerEnabled = {{FILE_MANAGER_ENABLED}};
-        
-        // Initialize UI based on file manager status
+
         function initializeUI() {
             if (!fileManagerEnabled) {
-                // Hide sidebar and file management elements
-                const sidebar = document.getElementById('sidebar');
-                if (sidebar) {
-                    sidebar.classList.add('hidden');
-                }
-                
-                // Update header title
-                const headerTitle = document.getElementById('headerTitle');
-                if (headerTitle) {
-                    headerTitle.textContent = 'Python Web Terminal - Secure Mode';
-                }
-                
-                // Update terminal info message
-                const modeInfo = document.getElementById('modeInfo');
-                if (modeInfo) {
-                    modeInfo.innerHTML = '🔒 File Manager Disabled - Terminal Only Mode';
-                }
-                
-                // Update welcome messages
-                const welcomeTitle = document.getElementById('welcomeTitle');
-                const welcomeFileManager = document.getElementById('welcomeFileManager');
-                
-                if (welcomeTitle) {
-                    welcomeTitle.textContent = 'Python Web Terminal v4.0 - Secure Mode';
-                }
-                if (welcomeFileManager) {
-                    welcomeFileManager.textContent = '🔒 File management disabled for enhanced security';
-                }
-                
-                // Disable file management functions
-                window.refreshFiles = function() { 
-                    console.log('File manager disabled for security'); 
-                };
-                window.selectFiles = function() { 
-                    addOutput('❌ File management disabled for security', 'stderr');
-                };
-                window.uploadFiles = function() { 
-                    addOutput('❌ File management disabled for security', 'stderr');
-                };
-                window.showCreateModal = function() { 
-                    addOutput('❌ File management disabled for security', 'stderr');
-                };
-                
-                // Hide context menu and modal
-                const contextMenu = document.getElementById('contextMenu');
-                const createModal = document.getElementById('createModal');
-                if (contextMenu) contextMenu.style.display = 'none';
-                if (createModal) createModal.style.display = 'none';
-                
-                return;
+                document.getElementById('sidebar')?.classList.add('hidden');
+                document.getElementById('headerTitle').textContent = 'Python Web Terminal - Secure Mode';
+                window.refreshFiles = () => {};
+                window.showCreateModal = () => addOutput('❌ File management disabled', 'stderr');
             }
         }
-        
-        // File management functions (only active when enabled)
+
         async function refreshFiles() {
-            if (!fileManagerEnabled) {
-                console.log('File manager disabled for security');
-                return;
-            }
-            
+            if (!fileManagerEnabled) return;
             try {
                 const response = await fetch('/api/files');
                 const result = await response.json();
-                
                 if (result.success) {
                     files = result.data;
                     renderFiles();
                 } else {
-                    console.error('Failed to load files:', result.message);
                     addOutput('❌ Failed to load files: ' + result.message, 'stderr');
                 }
             } catch (error) {
-                console.error('Error loading files:', error);
                 addOutput('❌ Error loading files: ' + error.message, 'stderr');
             }
         }
-        
+
         function renderFiles() {
-            if (!fileManagerEnabled) return;
-            
             const container = document.getElementById('filesContainer');
-            
             if (files.length === 0) {
                 container.innerHTML = '<div style="padding: 20px; text-align: center; color: #7d8590;">No files found</div>';
                 return;
             }
-            
             container.innerHTML = files.map(file => `
                 <div class="file-item" data-path="${file.path}" data-is-dir="${file.isDir}" onclick="selectFile('${file.path}', ${file.isDir})" oncontextmenu="showContextMenu(event, '${file.path}', ${file.isDir})">
                     <span class="file-icon">${file.isDir ? '📁' : getFileIcon(file.name)}</span>
@@ -870,264 +634,156 @@
                 </div>
             `).join('');
         }
-        
+
         function getFileIcon(filename) {
             const ext = filename.split('.').pop().toLowerCase();
-            const iconMap = {
-                'py': '🐍',
-                'js': '🟨',
-                'html': '🌐',
-                'css': '🎨',
-                'json': '📋',
-                'md': '📝',
-                'txt': '📄',
-                'png': '🖼️',
-                'jpg': '🖼️',
-                'jpeg': '🖼️',
-                'gif': '🖼️',
-                'pdf': '📕'
-            };
+            const iconMap = { 'py': '🐍', 'js': '🟨', 'html': '🌐', 'css': '🎨', 'json': '📋', 'md': '📝', 'txt': '📄', 'png': '🖼️', 'jpg': '🖼️', 'jpeg': '🖼️', 'gif': '🖼️', 'pdf': '📕' };
             return iconMap[ext] || '📄';
         }
-        
+
         function selectFile(path, isDir) {
-            if (!fileManagerEnabled) return;
-            
-            // Remove previous selection
-            document.querySelectorAll('.file-item').forEach(item => {
-                item.classList.remove('selected');
-            });
-            
-            // Add selection to current item
+            document.querySelectorAll('.file-item').forEach(item => item.classList.remove('selected'));
             const item = document.querySelector(`[data-path="${path}"]`);
             if (item) {
                 item.classList.add('selected');
                 selectedFile = { path, isDir };
             }
         }
-        
+
         function showContextMenu(event, path, isDir) {
-            if (!fileManagerEnabled) return;
-            
             event.preventDefault();
             event.stopPropagation();
-            
-            selectedFile = { path, isDir };
+            selectFile(path, isDir); 
             
             const menu = document.getElementById('contextMenu');
+            const setExecItem = document.getElementById('contextMenuSetExec');
+            const separator = document.getElementById('contextMenuSeparator');
+            
+            if (!isDir && path.toLowerCase().endsWith('.py')) {
+                setExecItem.style.display = 'block';
+                separator.style.display = 'block';
+            } else {
+                setExecItem.style.display = 'none';
+                separator.style.display = 'none';
+            }
+            
             menu.style.display = 'block';
             menu.style.left = event.pageX + 'px';
             menu.style.top = event.pageY + 'px';
         }
-        
-        // Hide context menu when clicking elsewhere
-        document.addEventListener('click', () => {
-            if (fileManagerEnabled) {
-                document.getElementById('contextMenu').style.display = 'none';
-            }
-        });
-        
-        async function downloadFile() {
-            if (!fileManagerEnabled || !selectedFile || selectedFile.isDir) return;
-            downloadFileByPath(selectedFile.path);
-        }
-        
+
+        document.addEventListener('click', () => document.getElementById('contextMenu').style.display = 'none');
+
         function downloadFileByPath(path) {
-            if (!fileManagerEnabled) {
-                addOutput('❌ File management disabled for security', 'stderr');
-                return;
-            }
-            
             const link = document.createElement('a');
             link.href = `/api/files/download?path=${encodeURIComponent(path)}`;
             link.download = path.split('/').pop();
-            document.body.appendChild(link);
             link.click();
-            document.body.removeChild(link);
+            link.remove();
         }
-        
+
+        async function downloadFile() {
+            if (!selectedFile || selectedFile.isDir) return;
+            downloadFileByPath(selectedFile.path);
+        }
+
         function confirmDelete(path) {
-            if (!fileManagerEnabled) {
-                addOutput('❌ File management disabled for security', 'stderr');
-                return;
-            }
-            
             if (confirm(`Are you sure you want to delete "${path}"?`)) {
                 deleteFileByPath(path);
             }
         }
-        
+
+        async function deleteFileByPath(path) {
+            try {
+                const response = await fetch(`/api/files/delete?path=${encodeURIComponent(path)}`, { method: 'DELETE' });
+                const result = await response.json();
+                if (result.success) {
+                    addOutput(`✅ Deleted: ${path}`, 'success');
+                    refreshFiles();
+                } else {
+                    addOutput(`❌ Delete failed: ${result.message}`, 'stderr');
+                }
+            } catch (error) {
+                addOutput(`❌ Delete error: ${error.message}`, 'stderr');
+            }
+        }
+
         async function deleteFile() {
-            if (!fileManagerEnabled || !selectedFile) return;
+            if (!selectedFile) return;
             deleteFileByPath(selectedFile.path);
         }
-        
-        async function deleteFileByPath(path) {
-            if (!fileManagerEnabled) {
-                addOutput('❌ File management disabled for security', 'stderr');
-                return;
-            }
-            
-            try {
-                const response = await fetch(`/api/files/delete?path=${encodeURIComponent(path)}`, {
-                    method: 'DELETE'
-                });
-                const result = await response.json();
-                
-                if (result.success) {
-                    addOutput('✅ Deleted: ' + path, 'success');
-                    refreshFiles();
-                } else {
-                    addOutput('❌ Delete failed: ' + result.message, 'stderr');
-                }
-            } catch (error) {
-                addOutput('❌ Delete error: ' + error.message, 'stderr');
-            }
-        }
-        
-        // File upload functions
-        function selectFiles() {
-            if (!fileManagerEnabled) {
-                addOutput('❌ File management disabled for security', 'stderr');
-                return;
-            }
-            document.getElementById('fileInput').click();
-        }
-        
+
         async function uploadFiles() {
-            if (!fileManagerEnabled) {
-                addOutput('❌ File management disabled for security', 'stderr');
-                return;
-            }
-            
-            const fileInput = document.getElementById('fileInput');
-            const files = fileInput.files;
-            
+            const files = document.getElementById('fileInput').files;
             if (files.length === 0) return;
-            
             const formData = new FormData();
-            for (let file of files) {
-                formData.append('files', file);
-            }
+            for (let file of files) formData.append('files', file);
             formData.append('path', '.');
-            
             try {
-                const response = await fetch('/api/files/upload', {
-                    method: 'POST',
-                    body: formData
-                });
+                const response = await fetch('/api/files/upload', { method: 'POST', body: formData });
                 const result = await response.json();
-                
                 if (result.success) {
-                    addOutput('✅ ' + result.message, 'success');
+                    addOutput(`✅ ${result.message}`, 'success');
                     refreshFiles();
                 } else {
-                    addOutput('❌ Upload failed: ' + result.message, 'stderr');
+                    addOutput(`❌ Upload failed: ${result.message}`, 'stderr');
                 }
             } catch (error) {
-                addOutput('❌ Upload error: ' + error.message, 'stderr');
+                addOutput(`❌ Upload error: ${error.message}`, 'stderr');
             }
-            
-            fileInput.value = '';
         }
         
-        // Drag and drop functionality (only if file manager enabled)
         if (fileManagerEnabled) {
             const uploadArea = document.getElementById('uploadArea');
-            
-            uploadArea.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                uploadArea.classList.add('drag-over');
-            });
-            
-            uploadArea.addEventListener('dragleave', (e) => {
+            uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('drag-over'); });
+            uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('drag-over'));
+            uploadArea.addEventListener('drop', async e => {
                 e.preventDefault();
                 uploadArea.classList.remove('drag-over');
-            });
-            
-            uploadArea.addEventListener('drop', async (e) => {
-                e.preventDefault();
-                uploadArea.classList.remove('drag-over');
-                
                 const files = e.dataTransfer.files;
                 if (files.length === 0) return;
-                
                 const formData = new FormData();
-                for (let file of files) {
-                    formData.append('files', file);
-                }
-                formData.append('path', '.');
-                
+                for (let file of files) formData.append('files', file);
                 try {
-                    const response = await fetch('/api/files/upload', {
-                        method: 'POST',
-                        body: formData
-                    });
+                    const response = await fetch('/api/files/upload', { method: 'POST', body: formData });
                     const result = await response.json();
-                    
                     if (result.success) {
-                        addOutput('✅ ' + result.message, 'success');
+                        addOutput(`✅ ${result.message}`, 'success');
                         refreshFiles();
                     } else {
-                        addOutput('❌ Upload failed: ' + result.message, 'stderr');
+                        addOutput(`❌ Upload failed: ${result.message}`, 'stderr');
                     }
                 } catch (error) {
-                    addOutput('❌ Upload error: ' + error.message, 'stderr');
+                    addOutput(`❌ Upload error: ${error.message}`, 'stderr');
                 }
             });
-            
-            uploadArea.addEventListener('click', selectFiles);
         }
-        
-        // Create file/folder functions
+
         function showCreateModal(type) {
-            if (!fileManagerEnabled) {
-                addOutput('❌ File management disabled for security', 'stderr');
-                return;
-            }
-            
             createType = type;
             const modal = document.getElementById('createModal');
-            const title = document.getElementById('modalTitle');
+            document.getElementById('modalTitle').textContent = `Create ${type}`;
             const input = document.getElementById('modalInput');
-            
-            title.textContent = type === 'file' ? 'Create File' : 'Create Folder';
             input.placeholder = `Enter ${type} name...`;
             input.value = '';
-            
             modal.style.display = 'block';
             input.focus();
         }
-        
+
         function closeCreateModal() {
-            if (!fileManagerEnabled) return;
             document.getElementById('createModal').style.display = 'none';
         }
         
         async function createItem() {
-            if (!fileManagerEnabled) {
-                addOutput('❌ File management disabled for security', 'stderr');
-                return;
-            }
-            
-            const input = document.getElementById('modalInput');
-            const name = input.value.trim();
-            
+            const name = document.getElementById('modalInput').value.trim();
             if (!name) return;
-            
             try {
                 const response = await fetch('/api/files/create', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        path: name,
-                        isDir: createType === 'folder'
-                    })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: name, isDir: createType === 'folder' })
                 });
                 const result = await response.json();
-                
                 if (result.success) {
                     addOutput(`✅ Created ${createType}: ${name}`, 'success');
                     refreshFiles();
@@ -1140,308 +796,154 @@
             }
         }
         
-        // Handle Enter key in modal
         if (fileManagerEnabled) {
-            document.getElementById('modalInput').addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    createItem();
-                } else if (e.key === 'Escape') {
-                    closeCreateModal();
-                }
+            document.getElementById('modalInput').addEventListener('keypress', e => {
+                if (e.key === 'Enter') createItem();
             });
-        }
-        
-        // Sidebar resizing (only if file manager enabled)
-        if (fileManagerEnabled) {
             const resizeHandle = document.getElementById('resizeHandle');
             const sidebar = document.getElementById('sidebar');
-            
-            resizeHandle.addEventListener('mousedown', (e) => {
+            resizeHandle.addEventListener('mousedown', () => {
                 isResizing = true;
                 document.addEventListener('mousemove', handleResize);
                 document.addEventListener('mouseup', stopResize);
             });
-            
             function handleResize(e) {
-                if (!isResizing) return;
-                
-                const newWidth = e.clientX;
-                if (newWidth >= 200 && newWidth <= 600) {
-                    sidebar.style.width = newWidth + 'px';
-                }
+                if (isResizing) sidebar.style.width = Math.max(200, Math.min(600, e.clientX)) + 'px';
             }
-            
             function stopResize() {
                 isResizing = false;
                 document.removeEventListener('mousemove', handleResize);
                 document.removeEventListener('mouseup', stopResize);
             }
         }
-        
-        // Enhanced terminal functions with fixed timing and order
-        function connectWebSocket() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            ws = new WebSocket(protocol + '//' + window.location.host + '/ws');
-            
-            ws.onopen = function() {
-                const mode = fileManagerEnabled ? 'Full' : 'Secure';
-                addOutput(`🔗 WebSocket connected ! (${mode} Mode)`, 'success');
-            };
-            
-            ws.onmessage = function(event) {
-                const data = JSON.parse(event.data);
-                handleMessage(data);
-            };
-            
-            ws.onclose = function() {
-                addOutput('❌ WebSocket connection closed - Reconnecting...', 'stderr');
-                setTimeout(connectWebSocket, 3000);
-            };
-            
-            ws.onerror = function(error) {
-                addOutput('❌ WebSocket error: ' + error, 'stderr');
-            };
+
+        function setExecutable() {
+            if (!selectedFile || selectedFile.isDir) return;
+            executableFile = selectedFile.path;
+            updateExecutingFileUI();
+            addOutput(`✅ Set active script to: ${executableFile}`, 'success');
         }
-        
-        // Enhanced script execution with better initialization
+
+        function updateExecutingFileUI() {
+            const scriptName = executableFile || 'None';
+            document.getElementById('activeScript').textContent = scriptName;
+            document.getElementById('runBtn').disabled = !executableFile || isRunning;
+            const statusEl = document.getElementById('status');
+            if (!executableFile && !isRunning) {
+                statusEl.textContent = 'Select Script';
+            } else if (!isRunning) {
+                statusEl.textContent = 'Ready';
+            }
+        }
+
+        function connectWebSocket() {
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${location.host}/ws`);
+            ws.onopen = () => addOutput(`🔗 WebSocket connected!`, 'success');
+            ws.onmessage = event => handleMessage(JSON.parse(event.data));
+            ws.onclose = () => { addOutput('❌ WebSocket closed. Reconnecting...', 'stderr'); setTimeout(connectWebSocket, 3000); };
+        }
+
         function executeScript() {
             if (isRunning || !ws || ws.readyState !== WebSocket.OPEN) return;
-            
-            // Complete reset
-            resetInputDetection();
+            if (!executableFile) {
+                addOutput('❌ No script selected. Right-click a Python file to set it.', 'stderr');
+                return;
+            }
             isRunning = true;
             isWaitingForInput = false;
-            lastLineElement = null; // Reset for new execution
+            lastLineElement = null;
             lastOutputTime = Date.now();
-            
-            // Update UI
-            document.getElementById('runBtn').disabled = true;
+            updateExecutingFileUI();
             document.getElementById('status').textContent = 'Running';
             document.getElementById('status').className = 'status running';
             hideInputSection();
-            
-            addOutput('{{COMMAND_DISPLAY}}', 'command-line');
-            
-            ws.send(JSON.stringify({type: 'execute'}));
-            
-            console.log('Script execution started - monitoring for output and input needs');
-            
-            // Don't start timeout immediately - let script initialize
-            setTimeout(() => {
-                if (isRunning && !isWaitingForInput) {
-                    startInputDetectionTimeout();
-                }
-            }, 3000); // 3 second grace period for script startup
+            addOutput(`$ python ${executableFile}`, 'command-line');
+            ws.send(JSON.stringify({ type: 'execute', file: executableFile }));
         }
-        
-        // Conservative timeout - only for real hangs
-        function startInputDetectionTimeout() {
-            if (isWaitingForInput) {
-                return;
-            }
-            
-            clearInputDetectionTimeout();
-            inputDetectionTimeout = setTimeout(() => {
-                if (isRunning && !isWaitingForInput && (Date.now() - lastOutputTime) > 4000) {
-                    console.log('Conservative timeout: No output for 4+ seconds - assuming input needed');
-                    showInputSection('Timeout: Process may need input');
-                }
-            }, 4500); // Conservative 4.5 second timeout
-        }
-        
-        function clearInputDetectionTimeout() {
-            if (inputDetectionTimeout) {
-                clearTimeout(inputDetectionTimeout);
-                inputDetectionTimeout = null;
-            }
-        }
-        
-        function resetInputDetection() {
-            clearInputDetectionTimeout();
-            inputDetectionCount = 0;
-        }
-        
-        // ✅ UPDATED: Message handling with simpler logic
+
         function handleMessage(data) {
-            const currentTime = Date.now();
-            
+            lastOutputTime = Date.now();
             switch(data.type) {
                 case 'stdout':
-                    lastOutputTime = Date.now();
                     addOutput(data.content, 'stdout');
-                    
-                    // Now check for input prompts on the currently active line
-                    let promptText = "";
-                    if (lastLineElement) {
-                        promptText = lastLineElement.textContent;
-                    }
-                    
+                    let promptText = lastLineElement ? lastLineElement.textContent : "";
                     if (isRunning && !isWaitingForInput && promptText) {
-                        const trimmedLine = promptText.trim().toLowerCase();
-                        
-                        // Use your existing, excellent pattern matching
-                        const isInputPrompt = 
-                            promptText.trim().endsWith(':') ||
-                            promptText.trim().endsWith('?') ||
-                            trimmedLine.includes('enter your') ||
-                            trimmedLine.includes('type your') ||
-                            trimmedLine.includes('input your') ||
-                            trimmedLine.includes('what is your') ||
-                            trimmedLine.includes("what's your") ||
-                            trimmedLine.includes('please enter') ||
-                            trimmedLine.includes('please type') ||
-                            trimmedLine.includes('enter a') ||
-                            trimmedLine.includes('type a') ||
-                            trimmedLine.includes('enter the') ||
-                            trimmedLine.includes('type the');
-                        
-                        if (isInputPrompt) {
-                            // Use a small timeout to ensure the prompt is fully rendered before showing the input box
+                        const trimmed = promptText.trim().toLowerCase();
+                        if (promptText.trim().endsWith(':') || promptText.trim().endsWith('?') || trimmed.includes('enter') || trimmed.includes('input')) {
                             setTimeout(() => {
-                                if (isRunning && !isWaitingForInput) {
-                                    console.log('Pattern detection:', trimmedLine);
-                                    showInputSection('Pattern detected in output');
-                                }
+                                if (isRunning && !isWaitingForInput) showInputSection('Pattern detected');
                             }, 50);
                         }
                     }
-                    
-                    // The conservative timeout for input detection can remain as a fallback.
-                    startInputDetectionTimeout();
                     break;
-                    
                 case 'stderr':
                     addOutput(data.content, 'stderr');
-                    lastOutputTime = currentTime;
                     break;
-                    
                 case 'completed':
                     addOutput('──────────────────────────────────────────', 'info');
-                    addOutput('✅ Script execution completed. ' + data.content, 'success');
+                    addOutput(`✅ Script finished. ${data.content}`, 'success');
                     resetState();
                     break;
-                    
                 case 'error':
-                    addOutput('❌ Error: ' + data.content, 'stderr');
+                    addOutput(`❌ Error: ${data.content}`, 'stderr');
                     resetState();
                     break;
             }
         }
-        
+
         function showInputSection(reason = 'Input required') {
-            if (!isRunning || isWaitingForInput) {
-                console.log('Input section already shown or not running, ignoring:', reason);
-                return;
-            }
-            
-            const inputSection = document.getElementById('inputSection');
-            const inputField = document.getElementById('userInput');
-            const status = document.getElementById('status');
-            
+            if (!isRunning || isWaitingForInput) return;
             isWaitingForInput = true;
-            inputDetectionCount++;
-            clearInputDetectionTimeout();
-            
-            inputSection.classList.add('show');
-            status.textContent = 'Waiting for Input';
-            status.className = 'status waiting-input';
-            
-            setTimeout(() => {
-                if (inputField && isWaitingForInput) {
-                    inputField.focus();
-                    inputField.select();
-                }
-            }, 100);
-            
-            addOutput(`⏳ Input needed (${reason}) - Detection #${inputDetectionCount}`, 'input-waiting');
-            
-            const output = document.getElementById('output');
-            output.scrollTop = output.scrollHeight;
-            
-            console.log(`Input section shown: ${reason} (Detection #${inputDetectionCount})`);
-        }
-        
-        function hideInputSection() {
             const inputSection = document.getElementById('inputSection');
-            const status = document.getElementById('status');
-            
-            if (inputSection.classList.contains('show')) {
-                inputSection.classList.remove('show');
-                if (isRunning) {
-                    status.textContent = 'Running';
-                    status.className = 'status running';
-                }
+            inputSection.classList.add('show');
+            document.getElementById('status').textContent = 'Waiting for Input';
+            document.getElementById('status').className = 'status waiting-input';
+            setTimeout(() => document.getElementById('userInput')?.focus(), 100);
+            addOutput(`⏳ ${reason}`, 'input-waiting');
+            document.getElementById('output').scrollTop = document.getElementById('output').scrollHeight;
+        }
+
+        function hideInputSection() {
+            document.getElementById('inputSection').classList.remove('show');
+            if (isRunning) {
+                document.getElementById('status').textContent = 'Running';
+                document.getElementById('status').className = 'status running';
             }
         }
-        
+
         function sendInput() {
+            if (!isWaitingForInput || !ws || ws.readyState !== WebSocket.OPEN) return;
             const inputField = document.getElementById('userInput');
-            const inputValue = inputField.value;
-            
-            if (!isWaitingForInput || !ws || ws.readyState !== WebSocket.OPEN) {
-                console.log('Cannot send input: waiting=' + isWaitingForInput + ', wsReady=' + (ws && ws.readyState === WebSocket.OPEN));
-                return;
-            }
-            
-            addOutput('> ' + (inputValue || '(empty)'), 'input-prompt');
-            lastLineElement = null; // ✅ UPDATED: Finalize the user's echo line
-            
-            ws.send(JSON.stringify({
-                type: 'input',
-                input: inputValue
-            }));
-            
+            addOutput(`> ${inputField.value}`, 'input-prompt');
+            lastLineElement = null;
+            ws.send(JSON.stringify({ type: 'input', input: inputField.value }));
             inputField.value = '';
             hideInputSection();
-            
             isWaitingForInput = false;
             lastOutputTime = Date.now();
-            clearInputDetectionTimeout();
-            
-            console.log('Input sent successfully:', inputValue || '(empty)');
-            console.log('State reset - ready for next output/detection cycle');
         }
-        
+
         function handleInputKeyPress(event) {
-            if (event.key === 'Enter') {
-                sendInput();
-            } else if (event.key === 'Escape') {
-                const inputField = document.getElementById('userInput');
-                inputField.value = '';
-                hideInputSection();
-                isWaitingForInput = false;
-                console.log('Input cancelled by user');
-            }
+            if (event.key === 'Enter') sendInput();
         }
-        
+
         function resetState() {
             isRunning = false;
             isWaitingForInput = false;
-            lastLineElement = null; // ✅ UPDATED: Reset state
-            clearInputDetectionTimeout();
-            resetInputDetection();
-            document.getElementById('runBtn').disabled = false;
-            document.getElementById('status').textContent = 'Ready';
-            document.getElementById('status').className = 'status';
+            lastLineElement = null;
+            updateExecutingFileUI();
             hideInputSection();
-            console.log('State completely reset');
         }
-        
-        // ✅ REPLACED: New addOutput function to handle streaming data
+
         function addOutput(text, className = 'stdout') {
             const output = document.getElementById('output');
-            // Don't do anything for empty text.
             if (text === '') return;
-
-            // We will process text chunk by chunk, separated by newlines.
             const parts = text.split('\n');
-
-            // The first part might be a continuation of the previous line.
             if (parts[0]) {
                 if (lastLineElement) {
                     lastLineElement.textContent += parts[0];
                 } else {
-                    // Create a new line element.
                     const lineDiv = document.createElement('div');
                     lineDiv.className = 'output-line ' + className;
                     lineDiv.textContent = parts[0];
@@ -1449,68 +951,37 @@
                     lastLineElement = lineDiv;
                 }
             }
-
-            // Any subsequent parts are guaranteed to be new lines.
             for (let i = 1; i < parts.length; i++) {
-                // The previous line is now finished.
-                lastLineElement = null; 
-
-                // If the text ends with a newline, the last part of the split is an empty string.
-                // We don't want to create an empty div for it.
-                if (i === parts.length - 1 && parts[i] === '') {
-                    continue;
-                }
-                
-                // Create the new line element.
+                lastLineElement = null;
+                if (i === parts.length - 1 && parts[i] === '') continue;
                 const lineDiv = document.createElement('div');
                 lineDiv.className = 'output-line ' + className;
                 lineDiv.textContent = parts[i];
                 output.appendChild(lineDiv);
                 lastLineElement = lineDiv;
             }
-
-            // If the original text ended with a newline, it means the very last
-            // part we processed completes a line, so we shouldn't append to it later.
-            if (text.endsWith('\n')) {
-                lastLineElement = null;
-            }
-            
+            if (text.endsWith('\n')) lastLineElement = null;
             output.scrollTop = output.scrollHeight;
         }
-        
+
         function clearOutput() {
-            const output = document.getElementById('output');
-            const mode = fileManagerEnabled ? 'File Manager Edition' : 'Secure Mode';
-            const modeMessage = fileManagerEnabled ? 
-                '📂 Browse, upload, download, and manage files in the left panel' :
-                '🔒 File management disabled for enhanced security';
-            
-            output.innerHTML = `
-                <div class="output-line info">Python Web Terminal v4.0 - ${mode}</div>
-                <div class="output-line info">${modeMessage}</div>
-                <div class="output-line info">🌍 Works with ANY Python script - no modifications needed!</div>
-                <div class="output-line info">💡 Fixed input detection with proper timing and order!</div>
+            document.getElementById('output').innerHTML = `
+                <div class="output-line info">Python Web Terminal - Interactive Execution</div>
+                <div class="output-line info">📂 Right-click a Python file and 'Set as Executable' to begin</div>
                 <div class="output-line">──────────────────────────────────────────</div>
             `;
-            lastLineElement = null; // ✅ UPDATED: Reset state
+            lastLineElement = null;
         }
-        
-        // Initialize everything when page loads
+
         window.onload = function() {
             initializeUI();
+            clearOutput();
             connectWebSocket();
-            if (fileManagerEnabled) {
-                refreshFiles();
-            }
+            if (fileManagerEnabled) refreshFiles();
+            updateExecutingFileUI();
         };
-        
-        // Cleanup on page unload
-        window.addEventListener('beforeunload', function() {
-            if (ws) {
-                ws.close();
-            }
-            clearInputDetectionTimeout();
-        });
+
+        window.addEventListener('beforeunload', () => ws?.close());
     </script>
 </body>
 </html>
