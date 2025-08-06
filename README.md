@@ -16,6 +16,7 @@ SnakeFlex creates a beautiful web-based development environment for Python scrip
 * 🔒 **Security modes** - Full-featured or secure terminal-only mode
 * 🔄 **Cross-platform** - Windows, macOS, and Linux support
 * 🚀 **Zero setup** - Just point it at your Python file and go
+* 💾 **Embedded templates** - Built-in interface, custom templates optional
 
 ## 🚀 Quick Start
 
@@ -64,7 +65,7 @@ http://localhost:8090
 ### With Go (development)
 
 ```bash
-# Basic usage (full file manager)
+# Basic usage (embedded template)
 go run main.go --file script.py
 
 # Secure mode (terminal only)
@@ -76,7 +77,7 @@ go run main.go --file script.py --port 3000
 # Production deployment with security
 go run main.go --file script.py --port 8080 --disable-file-manager
 
-# Custom template
+# Custom template (optional - embedded template used as fallback)
 go run main.go --file script.py --template custom.html
 
 # Verbose logging
@@ -102,9 +103,48 @@ snakeflex.exe --file script.py --disable-file-manager
 | ------------------------ | --------------- | ---------------------------------------------- |
 | `--file`                 | `fibonacci.py`  | Python script to execute                      |
 | `--port`                 | `8090`          | Server port                                    |
-| `--template`             | `terminal.html` | HTML template file                             |
+| `--template`             | `terminal.html` | Custom HTML template file (optional)          |
 | `--verbose`              | `false`         | Enable detailed logging                        |
 | `--disable-file-manager` | `false`         | Disable file management for enhanced security  |
+
+## 🎨 Template System
+
+SnakeFlex uses a smart template fallback system that makes distribution effortless:
+
+### **📦 Template Priority (Smart Fallback)**
+
+1. **🎯 Custom External Template** - If you specify `--template custom.html` and the file exists
+2. **💾 Embedded Template** - Built-in `templates/terminal.html` (always available)
+3. **🔧 Minimal Fallback** - Basic HTML template (emergency only)
+
+### **💡 Why This Matters**
+
+* **Zero Dependencies** - Binary works standalone with embedded template
+* **Customization Freedom** - Override with your own template when needed
+* **Bulletproof Distribution** - No missing template files to worry about
+* **Professional Polish** - Always presents a clean interface
+
+### **🔨 Using Custom Templates**
+
+```bash
+# Use embedded template (default - always works)
+./snakeflex --file script.py
+
+# Use custom template with fallback protection
+./snakeflex --file script.py --template my-custom.html
+
+# Verbose mode shows which template is being used
+./snakeflex --file script.py --template my-custom.html --verbose
+# Output: ✅ Using external template: my-custom.html
+#    OR: 💾 External template 'my-custom.html' not found, using embedded template
+```
+
+Custom templates support these variables:
+- `{{PYTHON_FILE}}` - Name of the Python script
+- `{{ABS_PATH}}` - Absolute path to the script
+- `{{COMMAND_DISPLAY}}` - Full Python command being executed
+- `{{WORKING_DIR}}` - Current working directory
+- `{{FILE_MANAGER_ENABLED}}` - Whether file management is enabled
 
 ## 🔒 Security Modes
 
@@ -188,48 +228,60 @@ SnakeFlex includes a comprehensive file manager in the left sidebar:
 
 ## 📦 Distribution
 
-SnakeFlex compiles to a single binary with no dependencies (except Python on the target system). Perfect for:
+SnakeFlex compiles to a single binary with **embedded templates** and no dependencies (except Python on the target system). Perfect for:
 
-* **Sharing demos** - Send the binary + your Python scripts
-* **Educational environments** - Complete development environment in one binary
-* **Client presentations** - Professional Python script demonstrations with file management
+* **Instant deployment** - Single binary with built-in interface
+* **Sharing demos** - Just send the binary + your Python scripts (no template files needed!)
+* **Educational environments** - Complete development environment in one portable file
+* **Client presentations** - Professional Python script demonstrations
 * **Remote execution** - Lightweight server for Python development
 * **Workshop distribution** - One-click setup for coding workshops
 * **Secure deployment** - Production-ready with security controls
+
+### **📋 Distribution Examples**
 
 ```bash
 # Build for your platform
 go build -o snakeflex
 
-# Development package (full features)
-mkdir my-python-workspace
-cp snakeflex my-python-workspace/
-cp *.py my-python-workspace/
-cp terminal.html my-python-workspace/
-cp -r data/ my-python-workspace/  # Include data directories
+# Simple distribution (embedded template)
+mkdir python-demo
+cp snakeflex python-demo/
+cp *.py python-demo/
+cp -r data/ python-demo/  # Include data directories
+# No template files needed - embedded template always works!
+
+# Advanced distribution with custom branding
+mkdir branded-deployment
+cp snakeflex branded-deployment/
+cp *.py branded-deployment/
+cp custom-brand.html branded-deployment/
+echo './snakeflex --file app.py --template custom-brand.html' > branded-deployment/start.sh
+chmod +x branded-deployment/start.sh
 
 # Production package (secure mode)
 mkdir secure-deployment
 cp snakeflex secure-deployment/
 cp production_script.py secure-deployment/
-cp terminal.html secure-deployment/
 echo './snakeflex --file production_script.py --disable-file-manager --port 8080' > secure-deployment/start.sh
 chmod +x secure-deployment/start.sh
 
 # Package and distribute
-zip -r python-workspace.zip my-python-workspace/
-zip -r secure-deployment.zip secure-deployment/
+zip -r python-demo.zip python-demo/  # Minimal, always works
+zip -r branded-deployment.zip branded-deployment/  # Custom branded
+zip -r secure-deployment.zip secure-deployment/  # Production secure
 ```
 
 ## 🔧 How it works
 
 SnakeFlex uses WebSockets for real-time bidirectional communication between your browser and Python process, plus a REST API for file management operations (when enabled). It automatically detects when your script needs input and presents a clean interface for interaction.
 
-The Go server intelligently detects your system's Python installation (`python`, `python3`, or `py`) and runs scripts with proper buffering settings to ensure real-time output. File operations are secured to prevent access outside the working directory, and can be completely disabled for maximum security.
+The Go server intelligently detects your system's Python installation (`python`, `python3`, or `py`) and runs scripts with proper buffering settings to ensure real-time output. The embedded template system ensures the interface always works, while custom templates allow for branding and customization.
 
 **Architecture:**
 * **WebSocket connection** - Real-time terminal communication
 * **REST API** - File management operations (optional)
+* **Embedded templates** - Built-in interface with custom override support
 * **Security layer** - Path validation, access control, and feature disabling
 * **Multi-platform support** - Adaptive Python detection
 
@@ -289,7 +341,7 @@ raise Exception("Errors are highlighted")
 * **Python 3.x** - Any Python 3 installation
 * **Modern browser** - Chrome, Firefox, Safari, Edge
 
-*Note: The built binary has no Go dependencies and can run on any system with Python.*
+*Note: The built binary has embedded templates and no Go dependencies - runs on any system with Python.*
 
 ## 📦 Dependencies
 
@@ -305,6 +357,7 @@ SnakeFlex includes comprehensive security measures:
 * **Protected files** - Currently executing Python file cannot be deleted
 * **Input sanitization** - All file paths and operations are validated
 * **Safe uploads** - File uploads are restricted to working directory
+* **Template security** - Embedded templates prevent template injection attacks
 
 ### **Enhanced Security Mode** (`--disable-file-manager`)
 * **Eliminated attack surface** - File management endpoints completely removed
@@ -340,14 +393,22 @@ Found a bug? Have an idea? Pull requests are welcome!
 * File uploads are limited to 32MB by default (Full Mode only)
 * Hidden files and system directories (`.git`, `__pycache__`) are filtered from the file browser
 * Secure mode completely disables file management - no partial restrictions
+* Custom templates must be present at startup (embedded template used as fallback)
 
 ## 💡 Pro tips
+
+### Template Tips
+* **Use embedded templates** for zero-dependency distribution
+* **Test custom templates** with `--verbose` to see which template loads
+* **Embedded templates are bulletproof** - always work even without custom files
+* **Template variables** allow dynamic content insertion
+* **Custom branding** possible with external templates while keeping embedded fallback
 
 ### Terminal Tips (Both Modes)
 * Use `print(..., flush=True)` for immediate output in custom scripts
 * Press `Ctrl+C` in the terminal to stop long-running scripts
 * Check the browser console (F12) for debugging WebSocket issues
-* Use `--verbose` flag to debug script execution and input handling
+* Use `--verbose` flag to debug script execution and template loading
 
 ### File Management Tips (Full Mode Only)
 * **Drag and drop** files directly into the upload area for quick uploads
@@ -365,15 +426,16 @@ Found a bug? Have an idea? Pull requests are welcome!
 * **Network restrictions** - Use firewall rules to limit access
 
 ### Development Tips
-* Built binaries are portable - no Go installation needed on target machines
+* Built binaries are portable with embedded templates - no external files needed
 * Multiple concurrent output streams are handled safely (stdout + stderr)
 * File operations provide real-time feedback in the terminal (Full Mode)
 * The current Python script file is protected from accidental deletion
 * Secure mode provides the same terminal experience with zero file management risk
+* Custom templates override embedded ones automatically
 
 ## 🎉 Acknowledgments
 
-Inspired by the need for a complete, browser-based Python development environment that works everywhere while maintaining security flexibility. Built with love for the Python community and educators who need powerful, accessible, and secure tools.
+Inspired by the need for a complete, browser-based Python development environment that works everywhere while maintaining security flexibility. Built with love for the Python community and educators who need powerful, accessible, and secure tools with zero-dependency distribution.
 
 ## 🗺️ Roadmap
 
@@ -389,7 +451,8 @@ Inspired by the need for a complete, browser-based Python development environmen
 * 🔐 **Authentication** - User login and access control
 * 📊 **Usage analytics** - Security and performance monitoring
 * 🐳 **Docker images** - Pre-built containers for easy deployment
+* 🎨 **Template gallery** - Community-contributed interface themes
 
 ---
 
-*Made with ❤️ and ☕. Secure by design, powerful by choice.*
+*Made with ❤️ and ☕. Secure by design, powerful by choice, embeds beautifully.*

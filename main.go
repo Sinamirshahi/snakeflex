@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"embed"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -19,6 +20,11 @@ import (
 
 	"github.com/gorilla/websocket"
 )
+
+// Embed the HTML template at build time
+//
+//go:embed templates/terminal.html
+var embeddedTemplates embed.FS
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
@@ -192,11 +198,59 @@ func (ts *TerminalServer) getDirectoryTree(dirPath string) ([]FileInfo, error) {
 	return files, nil
 }
 
+// getHTMLContent returns the HTML content with smart fallback logic
+func (ts *TerminalServer) getHTMLContent(htmlFile string) (string, bool) {
+	// Priority 1: Try external custom template file
+	if htmlContent, err := os.ReadFile(htmlFile); err == nil {
+		if ts.verbose {
+			log.Printf("✅ Using external template: %s", htmlFile)
+		}
+		return string(htmlContent), false
+	}
+
+	// Priority 2: Try embedded template
+	if embeddedContent, err := embeddedTemplates.ReadFile("templates/terminal.html"); err == nil {
+		if ts.verbose {
+			log.Printf("💾 External template '%s' not found, using embedded template", htmlFile)
+		}
+		return string(embeddedContent), true
+	}
+
+	// Priority 3: Fallback error (should never happen if templates are properly embedded)
+	if ts.verbose {
+		log.Printf("❌ No templates available - this should not happen!")
+	}
+	return generateMinimalHTML(), true
+}
+
+// generateMinimalHTML creates a basic HTML template as absolute last resort
+func generateMinimalHTML() string {
+	return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Python Terminal - Minimal Mode</title>
+    <style>
+        body { background: #1e1e1e; color: #d4d4d4; font-family: monospace; padding: 20px; }
+        .error { color: #f48771; font-weight: bold; }
+        .info { color: #569cd6; }
+    </style>
+</head>
+<body>
+    <div class="error">⚠️  Template Loading Error</div>
+    <div class="info">The application is running in minimal mode.</div>
+    <div class="info">Please check your template files and rebuild.</div>
+    <div class="info">Python file: {{PYTHON_FILE}}</div>
+    <div class="info">Working directory: {{WORKING_DIR}}</div>
+</body>
+</html>`
+}
+
 func main() {
 	pythonFile := flag.String("file", "fibonacci.py", "Python file to execute")
 	port := flag.String("port", "8090", "Port to run server on")
 	verbose := flag.Bool("verbose", false, "Enable verbose logging")
-	htmlFile := flag.String("template", "terminal.html", "HTML template file")
+	htmlFile := flag.String("template", "terminal.html", "HTML template file (will use embedded if not found)")
 	disableFileManager := flag.Bool("disable-file-manager", false, "Disable file management features for security")
 	flag.Parse()
 
@@ -207,16 +261,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Check if Python file exists
 	if _, err := os.Stat(*pythonFile); os.IsNotExist(err) {
 		fmt.Printf("Error: Python file '%s' not found\n", *pythonFile)
 		os.Exit(1)
 	}
 
-	if _, err := os.Stat(*htmlFile); os.IsNotExist(err) {
-		fmt.Printf("Error: HTML template file '%s' not found\n", *htmlFile)
-		os.Exit(1)
-	}
-
+	// Detect Python command
 	pythonCmd, err := detectPythonCommand()
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
@@ -256,7 +307,8 @@ func main() {
 	fmt.Printf("🐍 Python Web Terminal started at http://localhost%s\n", serverPort)
 	fmt.Printf("📁 Working Directory: %s\n", workingDir)
 	fmt.Printf("🚀 Executing: %s\n", *pythonFile)
-	fmt.Printf("🎨 Template: %s\n", *htmlFile)
+	fmt.Printf("🎨 Template: %s (embedded fallback available)\n", *htmlFile)
+
 	if *verbose {
 		fmt.Println("📝 Verbose logging enabled")
 	}
@@ -274,21 +326,22 @@ func main() {
 }
 
 func (ts *TerminalServer) terminalHandler(w http.ResponseWriter, r *http.Request, htmlFile string) {
-	htmlContent, err := os.ReadFile(htmlFile)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error reading HTML template: %v", err), http.StatusInternalServerError)
-		return
-	}
+	htmlContent, isEmbedded := ts.getHTMLContent(htmlFile)
 
 	absPath, _ := filepath.Abs(ts.pythonFile)
 	commandDisplay := fmt.Sprintf("%s %s", ts.pythonCmd, ts.pythonFile)
 
-	htmlStr := string(htmlContent)
+	htmlStr := htmlContent
 	htmlStr = strings.ReplaceAll(htmlStr, "{{PYTHON_FILE}}", ts.pythonFile)
 	htmlStr = strings.ReplaceAll(htmlStr, "{{ABS_PATH}}", absPath)
 	htmlStr = strings.ReplaceAll(htmlStr, "{{COMMAND_DISPLAY}}", commandDisplay)
 	htmlStr = strings.ReplaceAll(htmlStr, "{{WORKING_DIR}}", ts.workingDir)
 	htmlStr = strings.ReplaceAll(htmlStr, "{{FILE_MANAGER_ENABLED}}", fmt.Sprintf("%t", ts.fileManagerEnabled))
+
+	// Show embedded notice if using embedded template
+	if isEmbedded {
+		htmlStr = strings.ReplaceAll(htmlStr, `id="embeddedNotice" style="display: none;"`, `id="embeddedNotice"`)
+	}
 
 	w.Header().Set("Content-Type", "text/html")
 	fmt.Fprint(w, htmlStr)
