@@ -309,6 +309,17 @@
             font-weight: bold;
         }
         
+        .input-waiting {
+            color: #ff9500;
+            font-weight: bold;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        
         .execution-controls {
             background: #21262d;
             border-top: 1px solid #30363d;
@@ -390,10 +401,22 @@
             border: 1px solid #ffd700;
             border-radius: 6px;
             padding: 12px;
+            animation: slideIn 0.3s ease-out;
         }
         
         .input-section.show {
             display: flex;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
         
         .input-label {
@@ -452,6 +475,12 @@
         .status.running {
             background: #1f6feb;
             color: white;
+        }
+        
+        .status.waiting-input {
+            background: #ff9500;
+            color: white;
+            animation: pulse 1.5s infinite;
         }
         
         .status.completed {
@@ -673,7 +702,7 @@
                     <div class="output-line info" id="welcomeTitle">Python Web Terminal v4.0 - File Manager Edition</div>
                     <div class="output-line info" id="welcomeFileManager">📂 Browse, upload, download, and manage files in the left panel</div>
                     <div class="output-line info">🌍 Works with ANY Python script - no modifications needed!</div>
-                    <div class="output-line info">💡 When you see a prompt ending with : or ?, the input box will appear automatically</div>
+                    <div class="output-line info">💡 Fixed input detection with proper timing and order!</div>
                     <div class="output-line">──────────────────────────────────────────</div>
                 </div>
                 
@@ -703,17 +732,14 @@
         </div>
     </div>
     
-    <!-- Hidden file input for uploads -->
     <input type="file" id="fileInput" multiple style="display: none;" onchange="uploadFiles()">
     
-    <!-- Context menu -->
     <div class="context-menu" id="contextMenu">
         <div class="context-menu-item" onclick="downloadFile()">📥 Download</div>
         <div class="context-menu-separator"></div>
         <div class="context-menu-item" onclick="deleteFile()">🗑️ Delete</div>
     </div>
     
-    <!-- Create modal -->
     <div class="modal" id="createModal">
         <div class="modal-content">
             <div class="modal-title" id="modalTitle">Create File</div>
@@ -730,11 +756,15 @@
         let isRunning = false;
         let isWaitingForInput = false;
         let lastOutputTime = 0;
-        let currentLine = "";
         let files = [];
         let selectedFile = null;
         let isResizing = false;
         let createType = 'file';
+        let inputDetectionTimeout = null;
+        let inputDetectionCount = 0;
+
+        // ✅ NEW: Global variable to track the last output element for streaming
+        let lastLineElement = null;
         
         // Read file manager enabled status from template
         const fileManagerEnabled = {{FILE_MANAGER_ENABLED}};
@@ -1148,14 +1178,14 @@
             }
         }
         
-        // Terminal functions (existing code)
+        // Enhanced terminal functions with fixed timing and order
         function connectWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             ws = new WebSocket(protocol + '//' + window.location.host + '/ws');
             
             ws.onopen = function() {
                 const mode = fileManagerEnabled ? 'Full' : 'Secure';
-                addOutput(`🔗 WebSocket connected - Ready for any Python script! (${mode} Mode)`, 'success');
+                addOutput(`🔗 WebSocket connected ! (${mode} Mode)`, 'success');
             };
             
             ws.onmessage = function(event) {
@@ -1173,13 +1203,18 @@
             };
         }
         
+        // Enhanced script execution with better initialization
         function executeScript() {
             if (isRunning || !ws || ws.readyState !== WebSocket.OPEN) return;
             
+            // Complete reset
+            resetInputDetection();
             isRunning = true;
             isWaitingForInput = false;
-            currentLine = "";
+            lastLineElement = null; // Reset for new execution
             lastOutputTime = Date.now();
+            
+            // Update UI
             document.getElementById('runBtn').disabled = true;
             document.getElementById('status').textContent = 'Running';
             document.getElementById('status').className = 'status running';
@@ -1188,76 +1223,96 @@
             addOutput('{{COMMAND_DISPLAY}}', 'command-line');
             
             ws.send(JSON.stringify({type: 'execute'}));
+            
+            console.log('Script execution started - monitoring for output and input needs');
+            
+            // Don't start timeout immediately - let script initialize
+            setTimeout(() => {
+                if (isRunning && !isWaitingForInput) {
+                    startInputDetectionTimeout();
+                }
+            }, 3000); // 3 second grace period for script startup
         }
         
-        function sendInput() {
-            const inputField = document.getElementById('userInput');
-            const inputValue = inputField.value.trim();
+        // Conservative timeout - only for real hangs
+        function startInputDetectionTimeout() {
+            if (isWaitingForInput) {
+                return;
+            }
             
-            if (!inputValue || !isWaitingForInput || !ws || ws.readyState !== WebSocket.OPEN) return;
-            
-            addOutput('> ' + inputValue, 'input-prompt');
-            
-            ws.send(JSON.stringify({
-                type: 'input',
-                input: inputValue
-            }));
-            
-            inputField.value = '';
-            isWaitingForInput = false;
-            hideInputSection();
+            clearInputDetectionTimeout();
+            inputDetectionTimeout = setTimeout(() => {
+                if (isRunning && !isWaitingForInput && (Date.now() - lastOutputTime) > 4000) {
+                    console.log('Conservative timeout: No output for 4+ seconds - assuming input needed');
+                    showInputSection('Timeout: Process may need input');
+                }
+            }, 4500); // Conservative 4.5 second timeout
         }
         
-        function handleInputKeyPress(event) {
-            if (event.key === 'Enter') {
-                sendInput();
+        function clearInputDetectionTimeout() {
+            if (inputDetectionTimeout) {
+                clearTimeout(inputDetectionTimeout);
+                inputDetectionTimeout = null;
             }
         }
         
-        function showInputSection() {
-            document.getElementById('inputSection').classList.add('show');
-            document.getElementById('userInput').focus();
+        function resetInputDetection() {
+            clearInputDetectionTimeout();
+            inputDetectionCount = 0;
         }
         
-        function hideInputSection() {
-            document.getElementById('inputSection').classList.remove('show');
-        }
-        
+        // ✅ UPDATED: Message handling with simpler logic
         function handleMessage(data) {
             const currentTime = Date.now();
             
             switch(data.type) {
                 case 'stdout':
-                    currentLine += data.content;
+                    lastOutputTime = Date.now();
                     addOutput(data.content, 'stdout');
-                    lastOutputTime = currentTime;
                     
-                    if (isRunning && !isWaitingForInput) {
-                        const trimmedLine = currentLine.trim();
+                    // Now check for input prompts on the currently active line
+                    let promptText = "";
+                    if (lastLineElement) {
+                        promptText = lastLineElement.textContent;
+                    }
+                    
+                    if (isRunning && !isWaitingForInput && promptText) {
+                        const trimmedLine = promptText.trim().toLowerCase();
                         
+                        // Use your existing, excellent pattern matching
                         const isInputPrompt = 
-                            trimmedLine.endsWith(': ') ||
-                            trimmedLine.endsWith('? ') ||
-                            trimmedLine.endsWith(':') ||
-                            trimmedLine.endsWith('?');
+                            promptText.trim().endsWith(':') ||
+                            promptText.trim().endsWith('?') ||
+                            trimmedLine.includes('enter your') ||
+                            trimmedLine.includes('type your') ||
+                            trimmedLine.includes('input your') ||
+                            trimmedLine.includes('what is your') ||
+                            trimmedLine.includes("what's your") ||
+                            trimmedLine.includes('please enter') ||
+                            trimmedLine.includes('please type') ||
+                            trimmedLine.includes('enter a') ||
+                            trimmedLine.includes('type a') ||
+                            trimmedLine.includes('enter the') ||
+                            trimmedLine.includes('type the');
                         
-                        if (isInputPrompt && trimmedLine.length > 3) {
+                        if (isInputPrompt) {
+                            // Use a small timeout to ensure the prompt is fully rendered before showing the input box
                             setTimeout(() => {
                                 if (isRunning && !isWaitingForInput) {
-                                    isWaitingForInput = true;
-                                    showInputSection();
+                                    console.log('Pattern detection:', trimmedLine);
+                                    showInputSection('Pattern detected in output');
                                 }
-                            }, 100);
-                        }
-                        
-                        if (data.content.includes('\n')) {
-                            currentLine = "";
+                            }, 50);
                         }
                     }
+                    
+                    // The conservative timeout for input detection can remain as a fallback.
+                    startInputDetectionTimeout();
                     break;
                     
                 case 'stderr':
                     addOutput(data.content, 'stderr');
+                    lastOutputTime = currentTime;
                     break;
                     
                 case 'completed':
@@ -1273,22 +1328,153 @@
             }
         }
         
+        function showInputSection(reason = 'Input required') {
+            if (!isRunning || isWaitingForInput) {
+                console.log('Input section already shown or not running, ignoring:', reason);
+                return;
+            }
+            
+            const inputSection = document.getElementById('inputSection');
+            const inputField = document.getElementById('userInput');
+            const status = document.getElementById('status');
+            
+            isWaitingForInput = true;
+            inputDetectionCount++;
+            clearInputDetectionTimeout();
+            
+            inputSection.classList.add('show');
+            status.textContent = 'Waiting for Input';
+            status.className = 'status waiting-input';
+            
+            setTimeout(() => {
+                if (inputField && isWaitingForInput) {
+                    inputField.focus();
+                    inputField.select();
+                }
+            }, 100);
+            
+            addOutput(`⏳ Input needed (${reason}) - Detection #${inputDetectionCount}`, 'input-waiting');
+            
+            const output = document.getElementById('output');
+            output.scrollTop = output.scrollHeight;
+            
+            console.log(`Input section shown: ${reason} (Detection #${inputDetectionCount})`);
+        }
+        
+        function hideInputSection() {
+            const inputSection = document.getElementById('inputSection');
+            const status = document.getElementById('status');
+            
+            if (inputSection.classList.contains('show')) {
+                inputSection.classList.remove('show');
+                if (isRunning) {
+                    status.textContent = 'Running';
+                    status.className = 'status running';
+                }
+            }
+        }
+        
+        function sendInput() {
+            const inputField = document.getElementById('userInput');
+            const inputValue = inputField.value;
+            
+            if (!isWaitingForInput || !ws || ws.readyState !== WebSocket.OPEN) {
+                console.log('Cannot send input: waiting=' + isWaitingForInput + ', wsReady=' + (ws && ws.readyState === WebSocket.OPEN));
+                return;
+            }
+            
+            addOutput('> ' + (inputValue || '(empty)'), 'input-prompt');
+            lastLineElement = null; // ✅ UPDATED: Finalize the user's echo line
+            
+            ws.send(JSON.stringify({
+                type: 'input',
+                input: inputValue
+            }));
+            
+            inputField.value = '';
+            hideInputSection();
+            
+            isWaitingForInput = false;
+            lastOutputTime = Date.now();
+            clearInputDetectionTimeout();
+            
+            console.log('Input sent successfully:', inputValue || '(empty)');
+            console.log('State reset - ready for next output/detection cycle');
+        }
+        
+        function handleInputKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendInput();
+            } else if (event.key === 'Escape') {
+                const inputField = document.getElementById('userInput');
+                inputField.value = '';
+                hideInputSection();
+                isWaitingForInput = false;
+                console.log('Input cancelled by user');
+            }
+        }
+        
         function resetState() {
             isRunning = false;
             isWaitingForInput = false;
-            currentLine = "";
+            lastLineElement = null; // ✅ UPDATED: Reset state
+            clearInputDetectionTimeout();
+            resetInputDetection();
             document.getElementById('runBtn').disabled = false;
             document.getElementById('status').textContent = 'Ready';
             document.getElementById('status').className = 'status';
             hideInputSection();
+            console.log('State completely reset');
         }
         
+        // ✅ REPLACED: New addOutput function to handle streaming data
         function addOutput(text, className = 'stdout') {
             const output = document.getElementById('output');
-            const line = document.createElement('div');
-            line.className = 'output-line ' + className;
-            line.textContent = text;
-            output.appendChild(line);
+            // Don't do anything for empty text.
+            if (text === '') return;
+
+            // We will process text chunk by chunk, separated by newlines.
+            const parts = text.split('\n');
+
+            // The first part might be a continuation of the previous line.
+            if (parts[0]) {
+                if (lastLineElement) {
+                    lastLineElement.textContent += parts[0];
+                } else {
+                    // Create a new line element.
+                    const lineDiv = document.createElement('div');
+                    lineDiv.className = 'output-line ' + className;
+                    lineDiv.textContent = parts[0];
+                    output.appendChild(lineDiv);
+                    lastLineElement = lineDiv;
+                }
+            }
+
+            // Any subsequent parts are guaranteed to be new lines.
+            for (let i = 1; i < parts.length; i++) {
+                // The previous line is now finished.
+                lastLineElement = null; 
+
+                // If the text ends with a newline, the last part of the split is an empty string.
+                // We don't want to create an empty div for it.
+                if (i === parts.length - 1 && parts[i] === '') {
+                    continue;
+                }
+                
+                // Create the new line element.
+                const lineDiv = document.createElement('div');
+                lineDiv.className = 'output-line ' + className;
+                lineDiv.textContent = parts[i];
+                output.appendChild(lineDiv);
+                lastLineElement = lineDiv;
+            }
+
+            // If the original text ended with a newline, it means the very last
+            // part we processed completes a line, so we shouldn't append to it later.
+            if (text.endsWith('\n')) {
+                lastLineElement = null;
+            }
+            
             output.scrollTop = output.scrollHeight;
         }
         
@@ -1303,9 +1489,10 @@
                 <div class="output-line info">Python Web Terminal v4.0 - ${mode}</div>
                 <div class="output-line info">${modeMessage}</div>
                 <div class="output-line info">🌍 Works with ANY Python script - no modifications needed!</div>
-                <div class="output-line info">💡 When you see a prompt ending with : or ?, the input box will appear automatically</div>
+                <div class="output-line info">💡 Fixed input detection with proper timing and order!</div>
                 <div class="output-line">──────────────────────────────────────────</div>
             `;
+            lastLineElement = null; // ✅ UPDATED: Reset state
         }
         
         // Initialize everything when page loads
@@ -1322,6 +1509,7 @@
             if (ws) {
                 ws.close();
             }
+            clearInputDetectionTimeout();
         });
     </script>
 </body>

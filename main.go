@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"embed"
 	"encoding/json"
 	"flag"
@@ -606,6 +605,12 @@ func (ts *TerminalServer) deleteHandler(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(APIResponse{Success: true, Message: "Deleted successfully"})
 }
 
+//
+// ────────────────────────────────────────────────────────────────────────────────
+//  WebSocket handler – now feeds a single inputChan
+// ────────────────────────────────────────────────────────────────────────────────
+//
+
 func (ts *TerminalServer) websocketHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -620,6 +625,8 @@ func (ts *TerminalServer) websocketHandler(w http.ResponseWriter, r *http.Reques
 		log.Printf("WebSocket connection established from %s", r.RemoteAddr)
 	}
 
+	inputChan := make(chan string, 10)
+
 	for {
 		var msg Message
 		err := safeConn.ReadJSON(&msg)
@@ -632,30 +639,35 @@ func (ts *TerminalServer) websocketHandler(w http.ResponseWriter, r *http.Reques
 
 		switch msg.Type {
 		case "execute":
-			go ts.executePythonScript(safeConn)
+			go ts.executePythonScript(safeConn, inputChan) // pass channel
 		case "input":
 			if ts.verbose {
 				log.Printf("Received input: %s", msg.Input)
 			}
+			inputChan <- msg.Input + "\n"
 		}
 	}
 }
 
-func (ts *TerminalServer) executePythonScript(safeConn *SafeWebSocketConn) {
+//
+// ────────────────────────────────────────────────────────────────────────────────
+//  Execution wrappers – now accept inputChan
+// ────────────────────────────────────────────────────────────────────────────────
+//
+
+func (ts *TerminalServer) executePythonScript(safeConn *SafeWebSocketConn, inputChan chan string) {
 	if runtime.GOOS == "windows" {
-		ts.executeWindowsScript(safeConn)
+		ts.executeWindowsScript(safeConn, inputChan)
 	} else {
-		ts.executeUnixScript(safeConn)
+		ts.executeUnixScript(safeConn, inputChan)
 	}
 }
 
-func (ts *TerminalServer) executeWindowsScript(safeConn *SafeWebSocketConn) {
+func (ts *TerminalServer) executeWindowsScript(safeConn *SafeWebSocketConn, inputChan chan string) {
 	cmd := exec.Command(ts.pythonCmd, "-u", ts.pythonFile)
 
 	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, "PYTHONIOENCODING=utf-8")
-	cmd.Env = append(cmd.Env, "PYTHONUNBUFFERED=1")
-	cmd.Env = append(cmd.Env, "PYTHONUTF8=1")
+	cmd.Env = append(cmd.Env, "PYTHONIOENCODING=utf-8", "PYTHONUNBUFFERED=1", "PYTHONUTF8=1")
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -680,24 +692,22 @@ func (ts *TerminalServer) executeWindowsScript(safeConn *SafeWebSocketConn) {
 		return
 	}
 
-	ts.handleIO(safeConn, stdin, stdout, stderr, cmd)
+	ts.handleIO(safeConn, stdin, stdout, stderr, cmd, inputChan)
 }
 
-func (ts *TerminalServer) executeUnixScript(safeConn *SafeWebSocketConn) {
+func (ts *TerminalServer) executeUnixScript(safeConn *SafeWebSocketConn, inputChan chan string) {
 	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
-		ts.executePTYScript(safeConn)
+		ts.executePTYScript(safeConn, inputChan)
 	} else {
-		ts.executeWindowsScript(safeConn)
+		ts.executeWindowsScript(safeConn, inputChan)
 	}
 }
 
-func (ts *TerminalServer) executePTYScript(safeConn *SafeWebSocketConn) {
+func (ts *TerminalServer) executePTYScript(safeConn *SafeWebSocketConn, inputChan chan string) {
 	cmd := exec.Command(ts.pythonCmd, "-u", ts.pythonFile)
 
 	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, "PYTHONIOENCODING=utf-8")
-	cmd.Env = append(cmd.Env, "PYTHONUNBUFFERED=1")
-	cmd.Env = append(cmd.Env, "TERM=xterm-256color")
+	cmd.Env = append(cmd.Env, "PYTHONIOENCODING=utf-8", "PYTHONUNBUFFERED=1", "TERM=xterm-256color")
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -722,26 +732,17 @@ func (ts *TerminalServer) executePTYScript(safeConn *SafeWebSocketConn) {
 		return
 	}
 
-	ts.handleIO(safeConn, stdin, stdout, stderr, cmd)
+	ts.handleIO(safeConn, stdin, stdout, stderr, cmd, inputChan)
 }
 
-func (ts *TerminalServer) handleIO(safeConn *SafeWebSocketConn, stdin io.WriteCloser, stdout, stderr io.ReadCloser, cmd *exec.Cmd) {
-	done := make(chan bool)
-	inputChan := make(chan string, 10)
+//
+// ────────────────────────────────────────────────────────────────────────────────
+//  handleIO – consumes inputChan, no duplicate reader, no extra newlines
+// ────────────────────────────────────────────────────────────────────────────────
+//
 
-	// Handle user input from WebSocket
-	go func() {
-		for {
-			var msg Message
-			err := safeConn.ReadJSON(&msg)
-			if err != nil {
-				return
-			}
-			if msg.Type == "input" {
-				inputChan <- msg.Input + "\n"
-			}
-		}
-	}()
+func (ts *TerminalServer) handleIO(safeConn *SafeWebSocketConn, stdin io.WriteCloser, stdout, stderr io.ReadCloser, cmd *exec.Cmd, inputChan chan string) {
+	done := make(chan bool)
 
 	// Forward user input to Python process
 	go func() {
@@ -754,21 +755,31 @@ func (ts *TerminalServer) handleIO(safeConn *SafeWebSocketConn, stdin io.WriteCl
 		}
 	}()
 
-	// Stream stdout line by line
+	// Stream stdout as it comes in, without line buffering
 	go func() {
-		scanner := bufio.NewScanner(stdout)
-		for scanner.Scan() {
-			line := scanner.Text()
-			safeConn.SendMessage(Message{Type: "stdout", Content: line})
+		buffer := make([]byte, 1024) // Reusable buffer
+		for {
+			n, err := stdout.Read(buffer)
+			if n > 0 {
+				safeConn.SendMessage(Message{Type: "stdout", Content: string(buffer[:n])})
+			}
+			if err != nil { // This will catch io.EOF and other errors
+				break
+			}
 		}
 	}()
 
-	// Stream stderr line by line
+	// Stream stderr as it comes in, without line buffering
 	go func() {
-		scanner := bufio.NewScanner(stderr)
-		for scanner.Scan() {
-			line := scanner.Text()
-			safeConn.SendMessage(Message{Type: "stderr", Content: line})
+		buffer := make([]byte, 1024) // Reusable buffer
+		for {
+			n, err := stderr.Read(buffer)
+			if n > 0 {
+				safeConn.SendMessage(Message{Type: "stderr", Content: string(buffer[:n])})
+			}
+			if err != nil { // This will catch io.EOF and other errors
+				break
+			}
 		}
 	}()
 
