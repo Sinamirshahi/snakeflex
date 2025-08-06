@@ -10,17 +10,18 @@ SnakeFlex creates a beautiful web-based development environment for Python scrip
 
 * 🌐 **Universal compatibility** - Works with any Python script without code changes
 * 📂 **File manager** - Browse, upload, download, and manage files with drag & drop
+* 🎯 **Dynamic script selection** - Switch between Python scripts with right-click menu
+* 🚀 **No file required** - Start without specifying a script, choose dynamically in the UI
 * 💬 **Interactive input** - Handle `input()` calls seamlessly
 * ⚡ **Real-time output** - See your script's output as it happens
 * 🎨 **Modern UI** - GitHub-inspired dark interface with resizable panels
 * 🔒 **Security modes** - Full-featured or secure terminal-only mode
 * 🔄 **Cross-platform** - Windows, macOS, and Linux support
-* 🚀 **Zero setup** - Just point it at your Python file and go
 * 💾 **Embedded templates** - Built-in interface, custom templates optional
 
 ## 🚀 Quick Start
 
-### Option 1: Run directly with Go
+### Option 1: Start with a specific script
 
 ```bash
 git clone https://github.com/Sinamirshahi/snakeflex
@@ -29,17 +30,31 @@ go mod tidy
 go run main.go --file your_script.py
 ```
 
-### Option 2: Build and run
+### Option 2: Start and choose script dynamically
+
+```bash
+git clone https://github.com/Sinamirshahi/snakeflex
+cd snakeflex
+go mod tidy
+go run main.go
+```
+
+### Option 3: Build and run
 
 ```bash
 git clone https://github.com/Sinamirshahi/snakeflex
 cd snakeflex
 go mod tidy
 go build -o snakeflex
+
+# Run with specific script
 ./snakeflex --file your_script.py
+
+# Or run without file and choose in UI
+./snakeflex
 ```
 
-### Option 3: Build for different platforms
+### Option 4: Build for different platforms
 
 ```bash
 # Windows
@@ -58,54 +73,153 @@ GOOS=linux GOARCH=amd64 go build -o snakeflex-linux
 http://localhost:8090
 ```
 
-**Browse files in the left panel, click "Run Script" and watch the magic happen** ✨
+**🎯 Choose your workflow:**
+1. **Right-click any Python file** → "Set as Executable" → Click "Run Script" ✨
+2. **Start with `--file script.py`** → Click "Run Script" immediately
+3. **Upload Python files** → Right-click to set executable → Run
 
 ## 📋 Usage
 
 ### With Go (development)
 
 ```bash
-# Basic usage (embedded template)
+# Start without pre-selecting a script - choose in UI
+go run main.go
+
+# Basic usage with pre-selected script
 go run main.go --file script.py
 
 # Secure mode (terminal only)
 go run main.go --file script.py --disable-file-manager
 
+# Start in secure mode, choose script dynamically
+go run main.go --disable-file-manager
+
 # Custom port
-go run main.go --file script.py --port 3000
+go run main.go --port 3000
 
 # Production deployment with security
-go run main.go --file script.py --port 8080 --disable-file-manager
+go run main.go --port 8080 --disable-file-manager
 
 # Custom template (optional - embedded template used as fallback)
-go run main.go --file script.py --template custom.html
+go run main.go --template custom.html
 
 # Verbose logging
-go run main.go --file script.py --verbose
+go run main.go --verbose
 ```
 
 ### With built binary (production)
 
 ```bash
 # After building with: go build -o snakeflex
+
+# Start and choose script in UI
+./snakeflex
+
+# Start with specific script
 ./snakeflex --file script.py
-./snakeflex --file script.py --port 3000
-./snakeflex --file script.py --disable-file-manager --verbose
+
+# Various configurations
+./snakeflex --port 3000
+./snakeflex --disable-file-manager --verbose
 
 # Windows
+snakeflex.exe
 snakeflex.exe --file script.py
-snakeflex.exe --file script.py --disable-file-manager
+snakeflex.exe --disable-file-manager
 ```
 
 ### Command Line Options
 
 | Flag                     | Default         | Description                                    |
 | ------------------------ | --------------- | ---------------------------------------------- |
-| `--file`                 | `fibonacci.py`  | Python script to execute                      |
+| `--file`                 | *(none)*        | Python script to execute (optional)           |
 | `--port`                 | `8090`          | Server port                                    |
 | `--template`             | `terminal.html` | Custom HTML template file (optional)          |
 | `--verbose`              | `false`         | Enable detailed logging                        |
 | `--disable-file-manager` | `false`         | Disable file management for enhanced security  |
+
+## 🎯 Script Selection Workflows
+
+SnakeFlex offers flexible ways to work with Python scripts:
+
+### **🚀 Dynamic Selection** (Recommended)
+Start without specifying a file and choose scripts on-the-fly:
+
+```bash
+# Start SnakeFlex
+./snakeflex
+
+# In the UI:
+# 1. Right-click any Python file in the file manager
+# 2. Select "Set as Executable" 
+# 3. Click "Run Script" button
+# 4. Switch to different scripts anytime by repeating steps 1-2
+```
+
+**Benefits:**
+* 🔄 **Switch between scripts instantly** without restarting the server
+* 📁 **Work with multiple files** in the same session
+* 🎨 **Visual script management** - see which script is currently selected
+* ⚡ **No command-line changes** needed when switching scripts
+
+### **⚡ Pre-configured Start**
+Traditional approach with a specific script:
+
+```bash
+# Start with specific script ready to run
+./snakeflex --file my_script.py
+
+# Still allows switching:
+# - Right-click other Python files to switch
+# - Upload new files and set them as executable
+```
+
+### **🔒 Secure Mode Selection**
+Even in secure mode, you can still switch between existing Python scripts:
+
+```bash
+# Start in secure mode
+./snakeflex --disable-file-manager
+
+# Script selection still works:
+# - Right-click existing Python files
+# - Set as executable and run
+# - No file upload/download, but script switching is available
+```
+
+## 📂 File Management & Script Selection
+
+*Available in Full Mode only. Use `--disable-file-manager` to disable for security.*
+
+### **🎯 Right-Click Script Selection**
+The most intuitive way to work with Python scripts:
+
+1. **📁 Browse files** - See all Python files in the left sidebar
+2. **🖱️ Right-click any .py file** - Context menu appears
+3. **▶️ Select "Set as Executable"** - Script becomes the active one
+4. **🚀 Click "Run Script"** - Execute the selected script
+5. **🔄 Repeat for different scripts** - Switch anytime without restart
+
+### **📈 Visual Feedback**
+* **Active script indicator** - Shows currently selected script name
+* **Status updates** - "Ready", "Running", "Waiting for Input" states
+* **File icons** - Python files show 🐍 icon for easy identification
+* **Context menu visibility** - Right-click options adapt to file type
+
+### **📁 File Operations**
+* **Browse files** - Tree view of your working directory
+* **Upload files** - Drag & drop or click to upload multiple files
+* **Download files** - One-click download for any file
+* **Create files/folders** - Built-in creation dialog
+* **Delete files/folders** - Safe deletion with confirmation
+* **File icons** - Visual file type indicators (🐍 .py, 🌐 .html, 📄 .txt, etc.)
+
+### **🎛️ Interface Features**
+* **Resizable sidebar** - Drag the edge to adjust panel width
+* **Context menus** - Right-click files for quick actions
+* **Real-time updates** - File list refreshes automatically
+* **Security protection** - Prevents access outside working directory
 
 ## 🎨 Template System
 
@@ -128,21 +242,19 @@ SnakeFlex uses a smart template fallback system that makes distribution effortle
 
 ```bash
 # Use embedded template (default - always works)
-./snakeflex --file script.py
+./snakeflex
 
 # Use custom template with fallback protection
-./snakeflex --file script.py --template my-custom.html
+./snakeflex --template my-custom.html
 
 # Verbose mode shows which template is being used
-./snakeflex --file script.py --template my-custom.html --verbose
+./snakeflex --template my-custom.html --verbose
 # Output: ✅ Using external template: my-custom.html
 #    OR: 💾 External template 'my-custom.html' not found, using embedded template
 ```
 
 Custom templates support these variables:
-- `{{PYTHON_FILE}}` - Name of the Python script
-- `{{ABS_PATH}}` - Absolute path to the script
-- `{{COMMAND_DISPLAY}}` - Full Python command being executed
+- `{{INITIAL_PYTHON_FILE}}` - Name of the initially selected Python script
 - `{{WORKING_DIR}}` - Current working directory
 - `{{FILE_MANAGER_ENABLED}}` - Whether file management is enabled
 
@@ -155,20 +267,21 @@ Perfect for production environments, shared systems, or when you need maximum se
 
 * ✅ **Terminal functionality** - Full Python script execution with interactive input
 * ✅ **Real-time output** - All terminal features work normally  
+* ✅ **Script switching** - Right-click existing Python files to switch between them
 * ❌ **File operations** - Upload, download, create, delete disabled
 * ❌ **File browsing** - Directory listing disabled
 * ❌ **API endpoints** - All `/api/files/*` routes disabled
 * 🔒 **Zero attack surface** - File management completely removed
 
 ```bash
-# Production deployment
-./snakeflex --file production_script.py --disable-file-manager --port 8080
+# Production deployment - can still switch between existing scripts
+./snakeflex --disable-file-manager --port 8080
 
-# Educational environment (students can't modify files)
-./snakeflex --file lesson.py --disable-file-manager
+# Educational environment (students can run existing scripts but not modify files)
+./snakeflex --disable-file-manager
 
-# Container deployment
-docker run -p 8090:8090 snakeflex --file app.py --disable-file-manager
+# Container deployment with script flexibility
+docker run -p 8090:8090 snakeflex --disable-file-manager
 ```
 
 ### **📂 Full Mode** (default)
@@ -178,27 +291,8 @@ Complete development environment with all features:
 * ✅ **Complete file management**
 * ✅ **Drag & drop uploads**
 * ✅ **File browsing and organization**
+* ✅ **Dynamic script selection and switching**
 * 🔒 **Secure within working directory**
-
-## 📂 File Management Features
-
-*Available in Full Mode only. Use `--disable-file-manager` to disable for security.*
-
-SnakeFlex includes a comprehensive file manager in the left sidebar:
-
-### **📁 File Operations**
-* **Browse files** - Tree view of your working directory
-* **Upload files** - Drag & drop or click to upload multiple files
-* **Download files** - One-click download for any file
-* **Create files/folders** - Built-in creation dialog
-* **Delete files/folders** - Safe deletion with confirmation
-* **File icons** - Visual file type indicators (🐍 .py, 🌐 .html, 📄 .txt, etc.)
-
-### **🎛️ Interface Features**
-* **Resizable sidebar** - Drag the edge to adjust panel width
-* **Context menus** - Right-click files for quick actions
-* **Real-time updates** - File list refreshes automatically
-* **Security protection** - Prevents access outside working directory
 
 ### **API Endpoints** (Full Mode Only)
 * `GET /api/files` - Browse directory contents
@@ -212,31 +306,32 @@ SnakeFlex includes a comprehensive file manager in the left sidebar:
 ## 🎯 Perfect for
 
 ### **Development & Education** (Full Mode)
-* **Education** - Teaching Python with file management in a browser
-* **Demos** - Showing off projects with easy file sharing
+* **Education** - Teaching Python with file management and easy script switching
+* **Demos** - Showing off multiple projects with one-click switching
 * **Remote development** - Full file management without SSH
-* **Data science** - Upload datasets, run scripts, download results
-* **Workshops** - Students can upload their work and test scripts
+* **Data science** - Upload datasets, test different scripts, download results
+* **Workshops** - Students can upload, switch between, and test multiple scripts
+* **Experimentation** - Quickly test different Python files in the same environment
 
 ### **Production & Security** (Secure Mode)
-* **Production deployment** - Secure Python script execution
-* **Shared environments** - Multiple users without file access risks
-* **Container deployment** - Minimal attack surface
+* **Production deployment** - Secure Python script execution with script flexibility
+* **Shared environments** - Multiple users can switch between approved scripts
+* **Container deployment** - Minimal attack surface with script selection
 * **Corporate environments** - Compliant with security policies
-* **Educational restrictions** - Students can run code but not modify files
-* **Public demos** - Safe script execution without file system access
+* **Educational restrictions** - Students can run different scripts but not modify files
+* **Public demos** - Safe script execution with multiple demonstration options
 
 ## 📦 Distribution
 
 SnakeFlex compiles to a single binary with **embedded templates** and no dependencies (except Python on the target system). Perfect for:
 
 * **Instant deployment** - Single binary with built-in interface
-* **Sharing demos** - Just send the binary + your Python scripts (no template files needed!)
-* **Educational environments** - Complete development environment in one portable file
-* **Client presentations** - Professional Python script demonstrations
+* **Multi-script sharing** - Upload a folder of Python scripts, users can switch between them
+* **Educational environments** - Complete development environment with script flexibility
+* **Client presentations** - Demonstrate multiple Python scripts without restart
 * **Remote execution** - Lightweight server for Python development
-* **Workshop distribution** - One-click setup for coding workshops
-* **Secure deployment** - Production-ready with security controls
+* **Workshop distribution** - One-click setup with multiple example scripts
+* **Secure deployment** - Production-ready with script selection flexibility
 
 ### **📋 Distribution Examples**
 
@@ -244,32 +339,36 @@ SnakeFlex compiles to a single binary with **embedded templates** and no depende
 # Build for your platform
 go build -o snakeflex
 
-# Simple distribution (embedded template)
-mkdir python-demo
-cp snakeflex python-demo/
-cp *.py python-demo/
-cp -r data/ python-demo/  # Include data directories
-# No template files needed - embedded template always works!
+# Multi-script distribution (embedded template)
+mkdir python-demos
+cp snakeflex python-demos/
+cp *.py python-demos/          # All your Python scripts
+cp -r data/ python-demos/      # Include data directories
+echo './snakeflex' > python-demos/start.sh  # No specific file - choose in UI
+chmod +x python-demos/start.sh
+# Users right-click any Python file to run it!
 
-# Advanced distribution with custom branding
-mkdir branded-deployment
-cp snakeflex branded-deployment/
-cp *.py branded-deployment/
-cp custom-brand.html branded-deployment/
-echo './snakeflex --file app.py --template custom-brand.html' > branded-deployment/start.sh
-chmod +x branded-deployment/start.sh
+# Workshop package with multiple examples
+mkdir workshop-materials
+cp snakeflex workshop-materials/
+cp beginner.py intermediate.py advanced.py workshop-materials/
+cp -r examples/ workshop-materials/
+echo './snakeflex --port 8080' > workshop-materials/start.sh
+chmod +x workshop-materials/start.sh
+# Instructors and students can switch between difficulty levels
 
-# Production package (secure mode)
+# Production package with multiple scripts (secure mode)
 mkdir secure-deployment
 cp snakeflex secure-deployment/
-cp production_script.py secure-deployment/
-echo './snakeflex --file production_script.py --disable-file-manager --port 8080' > secure-deployment/start.sh
+cp script1.py script2.py script3.py secure-deployment/
+echo './snakeflex --disable-file-manager --port 8080' > secure-deployment/start.sh
 chmod +x secure-deployment/start.sh
+# Users can switch between approved scripts securely
 
 # Package and distribute
-zip -r python-demo.zip python-demo/  # Minimal, always works
-zip -r branded-deployment.zip branded-deployment/  # Custom branded
-zip -r secure-deployment.zip secure-deployment/  # Production secure
+zip -r python-demos.zip python-demos/           # Multi-script, always works
+zip -r workshop-materials.zip workshop-materials/   # Educational package
+zip -r secure-deployment.zip secure-deployment/     # Production secure
 ```
 
 ## 🔧 How it works
@@ -281,11 +380,23 @@ The Go server intelligently detects your system's Python installation (`python`,
 **Architecture:**
 * **WebSocket connection** - Real-time terminal communication
 * **REST API** - File management operations (optional)
+* **Dynamic script selection** - Switch between Python files without restart
 * **Embedded templates** - Built-in interface with custom override support
 * **Security layer** - Path validation, access control, and feature disabling
 * **Multi-platform support** - Adaptive Python detection
 
 ## 🎨 Features in action
+
+**Dynamic script selection:**
+
+```bash
+# Start SnakeFlex
+./snakeflex
+
+# In browser: right-click game.py → "Set as Executable" → Run
+# Later: right-click data_analysis.py → "Set as Executable" → Run  
+# Switch between scripts instantly without restarting server
+```
 
 **Interactive input detection:**
 
@@ -327,7 +438,7 @@ raise Exception("Errors are highlighted")
 
 ![Screenshot of SnakeFlex Interface](screenshot.png)
 
-*Interface showing file manager panel (Full Mode) and secure terminal-only mode*
+*Interface showing dynamic script selection, file manager panel (Full Mode), and secure terminal-only mode*
 
 ## 🔧 Requirements
 
@@ -358,21 +469,23 @@ SnakeFlex includes comprehensive security measures:
 * **Input sanitization** - All file paths and operations are validated
 * **Safe uploads** - File uploads are restricted to working directory
 * **Template security** - Embedded templates prevent template injection attacks
+* **Script validation** - Only Python files can be set as executable
 
 ### **Enhanced Security Mode** (`--disable-file-manager`)
 * **Eliminated attack surface** - File management endpoints completely removed
 * **API endpoint disabling** - All `/api/files/*` routes return 403 Forbidden
 * **UI adaptation** - Interface clearly shows secure mode status
+* **Script switching maintained** - Users can still switch between existing Python scripts
 * **Defense in depth** - Multiple layers of validation even when disabled
 * **Production ready** - Suitable for corporate and shared environments
 
 ### **When to Use Secure Mode**
-* ✅ **Production deployments** - Reduce attack surface in live environments
-* ✅ **Shared systems** - Multiple users without file access risks
-* ✅ **Educational restrictions** - Students can execute but not modify files
+* ✅ **Production deployments** - Reduce attack surface while maintaining script flexibility
+* ✅ **Shared systems** - Multiple users can switch scripts without file access risks
+* ✅ **Educational restrictions** - Students can run different scripts but not modify files
 * ✅ **Container deployment** - Minimal security footprint
 * ✅ **Corporate compliance** - Meet security policy requirements
-* ✅ **Public demos** - Safe script execution without file system access
+* ✅ **Public demos** - Safe script execution with multiple demonstration options
 
 ## 🤝 Contributing
 
@@ -392,10 +505,18 @@ Found a bug? Have an idea? Pull requests are welcome!
 * Large output bursts are throttled to prevent WebSocket flooding
 * File uploads are limited to 500MB by default (Full Mode only)
 * Hidden files and system directories (`.git`, `__pycache__`) are filtered from the file browser
-* Secure mode completely disables file management - no partial restrictions
+* Secure mode completely disables file management - script switching still available
 * Custom templates must be present at startup (embedded template used as fallback)
+* Only Python (.py) files can be set as executable scripts
 
 ## 💡 Pro tips
+
+### Script Selection Tips
+* **Start without `--file`** for maximum flexibility - choose scripts in the UI
+* **Right-click Python files** to switch between different scripts instantly
+* **Check the active script indicator** to see which script will run
+* **Upload multiple scripts** and test them all in the same session
+* **Use descriptive filenames** - they show clearly in the file manager
 
 ### Template Tips
 * **Use embedded templates** for zero-dependency distribution
@@ -412,7 +533,7 @@ Found a bug? Have an idea? Pull requests are welcome!
 
 ### File Management Tips (Full Mode Only)
 * **Drag and drop** files directly into the upload area for quick uploads
-* **Right-click files** to access download and delete options
+* **Right-click files** to access script selection, download, and delete options
 * **Resize the sidebar** by dragging the right edge for more space
 * **Use the refresh button** (🔄) to update the file list after external changes
 * **Create folders first**, then upload files to organize your workspace
@@ -421,6 +542,7 @@ Found a bug? Have an idea? Pull requests are welcome!
 ### Security Tips
 * **Use `--disable-file-manager`** for production deployments
 * **Test in Full Mode**, deploy in Secure Mode for safety
+* **Script switching works in both modes** - secure mode still allows Python script selection
 * **Monitor logs** with `--verbose` in secure environments
 * **Container isolation** - Run in Docker for additional security layers
 * **Network restrictions** - Use firewall rules to limit access
@@ -432,10 +554,11 @@ Found a bug? Have an idea? Pull requests are welcome!
 * The current Python script file is protected from accidental deletion
 * Secure mode provides the same terminal experience with zero file management risk
 * Custom templates override embedded ones automatically
+* Dynamic script selection eliminates the need to restart for different files
 
 ## 🎉 Acknowledgments
 
-Inspired by the need for a complete, browser-based Python development environment that works everywhere while maintaining security flexibility. Built with love for the Python community and educators who need powerful, accessible, and secure tools with zero-dependency distribution.
+Inspired by the need for a complete, browser-based Python development environment that works everywhere while maintaining security flexibility. Built with love for the Python community and educators who need powerful, accessible, and secure tools with zero-dependency distribution and flexible script management.
 
 ## 🗺️ Roadmap
 
@@ -443,6 +566,8 @@ Inspired by the need for a complete, browser-based Python development environmen
 * 📝 **Inline file editing** - Edit files directly in the browser (Full Mode)
 * 🎨 **Syntax highlighting** - Code highlighting for Python files
 * 🔍 **File search** - Quick file finding in large projects
+* 📊 **Script history** - Remember recently executed scripts
+* ⚡ **Quick script switching** - Keyboard shortcuts for common scripts
 
 ### **Future Enhancements**
 * 📁 **Folder navigation** - Navigate into subdirectories
@@ -452,6 +577,7 @@ Inspired by the need for a complete, browser-based Python development environmen
 * 📊 **Usage analytics** - Security and performance monitoring
 * 🐳 **Docker images** - Pre-built containers for easy deployment
 * 🎨 **Template gallery** - Community-contributed interface themes
+* 🏷️ **Script categories** - Organize scripts by type/purpose
 
 ---
 
