@@ -191,9 +191,6 @@ Found a bug? Have an idea? Pull requests are welcome!
 - Use `--verbose` flag to debug script execution and input handling
 - Multiple concurrent output streams are handled safely (stdout + stderr)
 
-## 📝 License
-
-MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 🎉 Acknowledgments
 
