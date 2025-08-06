@@ -27,10 +27,11 @@ var upgrader = websocket.Upgrader{
 }
 
 type TerminalServer struct {
-	pythonFile string
-	verbose    bool
-	pythonCmd  string
-	workingDir string
+	pythonFile         string
+	verbose            bool
+	pythonCmd          string
+	workingDir         string
+	fileManagerEnabled bool
 }
 
 type Message struct {
@@ -196,6 +197,7 @@ func main() {
 	port := flag.String("port", "8090", "Port to run server on")
 	verbose := flag.Bool("verbose", false, "Enable verbose logging")
 	htmlFile := flag.String("template", "terminal.html", "HTML template file")
+	disableFileManager := flag.Bool("disable-file-manager", false, "Disable file management features for security")
 	flag.Parse()
 
 	// Get working directory
@@ -228,10 +230,11 @@ func main() {
 	}
 
 	server := &TerminalServer{
-		pythonFile: *pythonFile,
-		verbose:    *verbose,
-		pythonCmd:  pythonCmd,
-		workingDir: workingDir,
+		pythonFile:         *pythonFile,
+		verbose:            *verbose,
+		pythonCmd:          pythonCmd,
+		workingDir:         workingDir,
+		fileManagerEnabled: !*disableFileManager,
 	}
 
 	// Setup routes
@@ -240,15 +243,17 @@ func main() {
 	})
 	http.HandleFunc("/ws", server.websocketHandler)
 
-	// File management API routes
-	http.HandleFunc("/api/files", server.filesHandler)
-	http.HandleFunc("/api/files/download", server.downloadHandler)
-	http.HandleFunc("/api/files/upload", server.uploadHandler)
-	http.HandleFunc("/api/files/create", server.createHandler)
-	http.HandleFunc("/api/files/delete", server.deleteHandler)
+	// Conditionally setup file management API routes
+	if server.fileManagerEnabled {
+		http.HandleFunc("/api/files", server.filesHandler)
+		http.HandleFunc("/api/files/download", server.downloadHandler)
+		http.HandleFunc("/api/files/upload", server.uploadHandler)
+		http.HandleFunc("/api/files/create", server.createHandler)
+		http.HandleFunc("/api/files/delete", server.deleteHandler)
+	}
 
 	serverPort := ":" + *port
-	fmt.Printf("🐍 Python Web Terminal with File Manager started at http://localhost%s\n", serverPort)
+	fmt.Printf("🐍 Python Web Terminal started at http://localhost%s\n", serverPort)
 	fmt.Printf("📁 Working Directory: %s\n", workingDir)
 	fmt.Printf("🚀 Executing: %s\n", *pythonFile)
 	fmt.Printf("🎨 Template: %s\n", *htmlFile)
@@ -256,7 +261,12 @@ func main() {
 		fmt.Println("📝 Verbose logging enabled")
 	}
 	fmt.Println("💬 Interactive input support enabled!")
-	fmt.Println("📂 File management panel available!")
+
+	if server.fileManagerEnabled {
+		fmt.Println("📂 File management panel enabled!")
+	} else {
+		fmt.Println("🔒 File management disabled for security")
+	}
 
 	if err := http.ListenAndServe(serverPort, nil); err != nil {
 		log.Fatal("Error starting server:", err)
@@ -278,13 +288,20 @@ func (ts *TerminalServer) terminalHandler(w http.ResponseWriter, r *http.Request
 	htmlStr = strings.ReplaceAll(htmlStr, "{{ABS_PATH}}", absPath)
 	htmlStr = strings.ReplaceAll(htmlStr, "{{COMMAND_DISPLAY}}", commandDisplay)
 	htmlStr = strings.ReplaceAll(htmlStr, "{{WORKING_DIR}}", ts.workingDir)
+	htmlStr = strings.ReplaceAll(htmlStr, "{{FILE_MANAGER_ENABLED}}", fmt.Sprintf("%t", ts.fileManagerEnabled))
 
 	w.Header().Set("Content-Type", "text/html")
 	fmt.Fprint(w, htmlStr)
 }
 
-// File management handlers
+// File management handlers - these will only be called if file manager is enabled
 func (ts *TerminalServer) filesHandler(w http.ResponseWriter, r *http.Request) {
+	// Security check: ensure file manager is enabled
+	if !ts.fileManagerEnabled {
+		http.Error(w, "File management disabled", http.StatusForbidden)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 
 	switch r.Method {
@@ -316,6 +333,12 @@ func (ts *TerminalServer) filesHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ts *TerminalServer) downloadHandler(w http.ResponseWriter, r *http.Request) {
+	// Security check: ensure file manager is enabled
+	if !ts.fileManagerEnabled {
+		http.Error(w, "File management disabled", http.StatusForbidden)
+		return
+	}
+
 	if r.Method != "GET" {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -357,6 +380,13 @@ func (ts *TerminalServer) downloadHandler(w http.ResponseWriter, r *http.Request
 }
 
 func (ts *TerminalServer) uploadHandler(w http.ResponseWriter, r *http.Request) {
+	// Security check: ensure file manager is enabled
+	if !ts.fileManagerEnabled {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "File management disabled"})
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 
 	if r.Method != "POST" {
@@ -427,6 +457,13 @@ func (ts *TerminalServer) uploadHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (ts *TerminalServer) createHandler(w http.ResponseWriter, r *http.Request) {
+	// Security check: ensure file manager is enabled
+	if !ts.fileManagerEnabled {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "File management disabled"})
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 
 	if r.Method != "POST" {
@@ -472,6 +509,13 @@ func (ts *TerminalServer) createHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (ts *TerminalServer) deleteHandler(w http.ResponseWriter, r *http.Request) {
+	// Security check: ensure file manager is enabled
+	if !ts.fileManagerEnabled {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "File management disabled"})
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 
 	if r.Method != "DELETE" {

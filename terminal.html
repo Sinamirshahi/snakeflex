@@ -79,6 +79,10 @@
             position: relative;
         }
         
+        .sidebar.hidden {
+            display: none;
+        }
+        
         .sidebar-header {
             background: #21262d;
             padding: 12px 15px;
@@ -600,6 +604,17 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+        
+        /* Security disabled message */
+        .security-notice {
+            background: linear-gradient(135deg, #f85149, #da3633);
+            color: white;
+            padding: 8px 15px;
+            font-size: 12px;
+            font-weight: bold;
+            text-align: center;
+            border-bottom: 1px solid #30363d;
+        }
     </style>
 </head>
 <body>
@@ -607,7 +622,7 @@
         <div class="header">
             <div class="header-title">
                 <span>🐍</span>
-                Python Web Terminal with File Manager
+                <span id="headerTitle">Python Web Terminal</span>
             </div>
             <div class="header-controls">
                 <button class="control-btn close"></button>
@@ -646,14 +661,14 @@
             </div>
             
             <div class="terminal-container">
-                <div class="terminal-info">
+                <div class="terminal-info" id="terminalInfo">
                     <span>📁 Working Directory: {{WORKING_DIR}}</span>
-                    <span class="file-info">File Manager + Terminal - Universal Python execution</span>
+                    <span class="file-info" id="modeInfo">File Manager + Terminal - Universal Python execution</span>
                 </div>
                 
                 <div class="terminal-output" id="output">
-                    <div class="output-line info">Python Web Terminal v4.0 - File Manager Edition</div>
-                    <div class="output-line info">📂 Browse, upload, download, and manage files in the left panel</div>
+                    <div class="output-line info" id="welcomeTitle">Python Web Terminal v4.0 - File Manager Edition</div>
+                    <div class="output-line info" id="welcomeFileManager">📂 Browse, upload, download, and manage files in the left panel</div>
                     <div class="output-line info">🌍 Works with ANY Python script - no modifications needed!</div>
                     <div class="output-line info">💡 When you see a prompt ending with : or ?, the input box will appear automatically</div>
                     <div class="output-line">──────────────────────────────────────────</div>
@@ -718,8 +733,72 @@
         let isResizing = false;
         let createType = 'file';
         
-        // File management functions
+        // Read file manager enabled status from template
+        const fileManagerEnabled = {{FILE_MANAGER_ENABLED}};
+        
+        // Initialize UI based on file manager status
+        function initializeUI() {
+            if (!fileManagerEnabled) {
+                // Hide sidebar and file management elements
+                const sidebar = document.getElementById('sidebar');
+                if (sidebar) {
+                    sidebar.classList.add('hidden');
+                }
+                
+                // Update header title
+                const headerTitle = document.getElementById('headerTitle');
+                if (headerTitle) {
+                    headerTitle.textContent = 'Python Web Terminal - Secure Mode';
+                }
+                
+                // Update terminal info message
+                const modeInfo = document.getElementById('modeInfo');
+                if (modeInfo) {
+                    modeInfo.innerHTML = '🔒 File Manager Disabled - Terminal Only Mode';
+                }
+                
+                // Update welcome messages
+                const welcomeTitle = document.getElementById('welcomeTitle');
+                const welcomeFileManager = document.getElementById('welcomeFileManager');
+                
+                if (welcomeTitle) {
+                    welcomeTitle.textContent = 'Python Web Terminal v4.0 - Secure Mode';
+                }
+                if (welcomeFileManager) {
+                    welcomeFileManager.textContent = '🔒 File management disabled for enhanced security';
+                }
+                
+                // Disable file management functions
+                window.refreshFiles = function() { 
+                    console.log('File manager disabled for security'); 
+                };
+                window.selectFiles = function() { 
+                    addOutput('❌ File management disabled for security', 'stderr');
+                };
+                window.uploadFiles = function() { 
+                    addOutput('❌ File management disabled for security', 'stderr');
+                };
+                window.showCreateModal = function() { 
+                    addOutput('❌ File management disabled for security', 'stderr');
+                };
+                
+                // Hide context menu and modal
+                const contextMenu = document.getElementById('contextMenu');
+                const createModal = document.getElementById('createModal');
+                if (contextMenu) contextMenu.style.display = 'none';
+                if (createModal) createModal.style.display = 'none';
+                
+                return;
+            }
+        }
+        
+        // File management functions (only active when enabled)
         async function refreshFiles() {
+            if (!fileManagerEnabled) {
+                console.log('File manager disabled for security');
+                return;
+            }
+            
             try {
                 const response = await fetch('/api/files');
                 const result = await response.json();
@@ -729,13 +808,17 @@
                     renderFiles();
                 } else {
                     console.error('Failed to load files:', result.message);
+                    addOutput('❌ Failed to load files: ' + result.message, 'stderr');
                 }
             } catch (error) {
                 console.error('Error loading files:', error);
+                addOutput('❌ Error loading files: ' + error.message, 'stderr');
             }
         }
         
         function renderFiles() {
+            if (!fileManagerEnabled) return;
+            
             const container = document.getElementById('filesContainer');
             
             if (files.length === 0) {
@@ -775,6 +858,8 @@
         }
         
         function selectFile(path, isDir) {
+            if (!fileManagerEnabled) return;
+            
             // Remove previous selection
             document.querySelectorAll('.file-item').forEach(item => {
                 item.classList.remove('selected');
@@ -789,6 +874,8 @@
         }
         
         function showContextMenu(event, path, isDir) {
+            if (!fileManagerEnabled) return;
+            
             event.preventDefault();
             event.stopPropagation();
             
@@ -802,15 +889,22 @@
         
         // Hide context menu when clicking elsewhere
         document.addEventListener('click', () => {
-            document.getElementById('contextMenu').style.display = 'none';
+            if (fileManagerEnabled) {
+                document.getElementById('contextMenu').style.display = 'none';
+            }
         });
         
         async function downloadFile() {
-            if (!selectedFile || selectedFile.isDir) return;
+            if (!fileManagerEnabled || !selectedFile || selectedFile.isDir) return;
             downloadFileByPath(selectedFile.path);
         }
         
         function downloadFileByPath(path) {
+            if (!fileManagerEnabled) {
+                addOutput('❌ File management disabled for security', 'stderr');
+                return;
+            }
+            
             const link = document.createElement('a');
             link.href = `/api/files/download?path=${encodeURIComponent(path)}`;
             link.download = path.split('/').pop();
@@ -820,17 +914,27 @@
         }
         
         function confirmDelete(path) {
+            if (!fileManagerEnabled) {
+                addOutput('❌ File management disabled for security', 'stderr');
+                return;
+            }
+            
             if (confirm(`Are you sure you want to delete "${path}"?`)) {
                 deleteFileByPath(path);
             }
         }
         
         async function deleteFile() {
-            if (!selectedFile) return;
+            if (!fileManagerEnabled || !selectedFile) return;
             deleteFileByPath(selectedFile.path);
         }
         
         async function deleteFileByPath(path) {
+            if (!fileManagerEnabled) {
+                addOutput('❌ File management disabled for security', 'stderr');
+                return;
+            }
+            
             try {
                 const response = await fetch(`/api/files/delete?path=${encodeURIComponent(path)}`, {
                     method: 'DELETE'
@@ -850,10 +954,19 @@
         
         // File upload functions
         function selectFiles() {
+            if (!fileManagerEnabled) {
+                addOutput('❌ File management disabled for security', 'stderr');
+                return;
+            }
             document.getElementById('fileInput').click();
         }
         
         async function uploadFiles() {
+            if (!fileManagerEnabled) {
+                addOutput('❌ File management disabled for security', 'stderr');
+                return;
+            }
+            
             const fileInput = document.getElementById('fileInput');
             const files = fileInput.files;
             
@@ -885,54 +998,61 @@
             fileInput.value = '';
         }
         
-        // Drag and drop functionality
-        const uploadArea = document.getElementById('uploadArea');
-        
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.classList.add('drag-over');
-        });
-        
-        uploadArea.addEventListener('dragleave', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('drag-over');
-        });
-        
-        uploadArea.addEventListener('drop', async (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('drag-over');
+        // Drag and drop functionality (only if file manager enabled)
+        if (fileManagerEnabled) {
+            const uploadArea = document.getElementById('uploadArea');
             
-            const files = e.dataTransfer.files;
-            if (files.length === 0) return;
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('drag-over');
+            });
             
-            const formData = new FormData();
-            for (let file of files) {
-                formData.append('files', file);
-            }
-            formData.append('path', '.');
+            uploadArea.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('drag-over');
+            });
             
-            try {
-                const response = await fetch('/api/files/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-                const result = await response.json();
+            uploadArea.addEventListener('drop', async (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('drag-over');
                 
-                if (result.success) {
-                    addOutput('✅ ' + result.message, 'success');
-                    refreshFiles();
-                } else {
-                    addOutput('❌ Upload failed: ' + result.message, 'stderr');
+                const files = e.dataTransfer.files;
+                if (files.length === 0) return;
+                
+                const formData = new FormData();
+                for (let file of files) {
+                    formData.append('files', file);
                 }
-            } catch (error) {
-                addOutput('❌ Upload error: ' + error.message, 'stderr');
-            }
-        });
-        
-        uploadArea.addEventListener('click', selectFiles);
+                formData.append('path', '.');
+                
+                try {
+                    const response = await fetch('/api/files/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        addOutput('✅ ' + result.message, 'success');
+                        refreshFiles();
+                    } else {
+                        addOutput('❌ Upload failed: ' + result.message, 'stderr');
+                    }
+                } catch (error) {
+                    addOutput('❌ Upload error: ' + error.message, 'stderr');
+                }
+            });
+            
+            uploadArea.addEventListener('click', selectFiles);
+        }
         
         // Create file/folder functions
         function showCreateModal(type) {
+            if (!fileManagerEnabled) {
+                addOutput('❌ File management disabled for security', 'stderr');
+                return;
+            }
+            
             createType = type;
             const modal = document.getElementById('createModal');
             const title = document.getElementById('modalTitle');
@@ -947,10 +1067,16 @@
         }
         
         function closeCreateModal() {
+            if (!fileManagerEnabled) return;
             document.getElementById('createModal').style.display = 'none';
         }
         
         async function createItem() {
+            if (!fileManagerEnabled) {
+                addOutput('❌ File management disabled for security', 'stderr');
+                return;
+            }
+            
             const input = document.getElementById('modalInput');
             const name = input.value.trim();
             
@@ -982,37 +1108,41 @@
         }
         
         // Handle Enter key in modal
-        document.getElementById('modalInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                createItem();
-            } else if (e.key === 'Escape') {
-                closeCreateModal();
-            }
-        });
-        
-        // Sidebar resizing
-        const resizeHandle = document.getElementById('resizeHandle');
-        const sidebar = document.getElementById('sidebar');
-        
-        resizeHandle.addEventListener('mousedown', (e) => {
-            isResizing = true;
-            document.addEventListener('mousemove', handleResize);
-            document.addEventListener('mouseup', stopResize);
-        });
-        
-        function handleResize(e) {
-            if (!isResizing) return;
-            
-            const newWidth = e.clientX;
-            if (newWidth >= 200 && newWidth <= 600) {
-                sidebar.style.width = newWidth + 'px';
-            }
+        if (fileManagerEnabled) {
+            document.getElementById('modalInput').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    createItem();
+                } else if (e.key === 'Escape') {
+                    closeCreateModal();
+                }
+            });
         }
         
-        function stopResize() {
-            isResizing = false;
-            document.removeEventListener('mousemove', handleResize);
-            document.removeEventListener('mouseup', stopResize);
+        // Sidebar resizing (only if file manager enabled)
+        if (fileManagerEnabled) {
+            const resizeHandle = document.getElementById('resizeHandle');
+            const sidebar = document.getElementById('sidebar');
+            
+            resizeHandle.addEventListener('mousedown', (e) => {
+                isResizing = true;
+                document.addEventListener('mousemove', handleResize);
+                document.addEventListener('mouseup', stopResize);
+            });
+            
+            function handleResize(e) {
+                if (!isResizing) return;
+                
+                const newWidth = e.clientX;
+                if (newWidth >= 200 && newWidth <= 600) {
+                    sidebar.style.width = newWidth + 'px';
+                }
+            }
+            
+            function stopResize() {
+                isResizing = false;
+                document.removeEventListener('mousemove', handleResize);
+                document.removeEventListener('mouseup', stopResize);
+            }
         }
         
         // Terminal functions (existing code)
@@ -1021,7 +1151,8 @@
             ws = new WebSocket(protocol + '//' + window.location.host + '/ws');
             
             ws.onopen = function() {
-                addOutput('🔗 WebSocket connected - Ready for any Python script!', 'success');
+                const mode = fileManagerEnabled ? 'Full' : 'Secure';
+                addOutput(`🔗 WebSocket connected - Ready for any Python script! (${mode} Mode)`, 'success');
             };
             
             ws.onmessage = function(event) {
@@ -1160,9 +1291,14 @@
         
         function clearOutput() {
             const output = document.getElementById('output');
+            const mode = fileManagerEnabled ? 'File Manager Edition' : 'Secure Mode';
+            const modeMessage = fileManagerEnabled ? 
+                '📂 Browse, upload, download, and manage files in the left panel' :
+                '🔒 File management disabled for enhanced security';
+            
             output.innerHTML = `
-                <div class="output-line info">Python Web Terminal v4.0 - File Manager Edition</div>
-                <div class="output-line info">📂 Browse, upload, download, and manage files in the left panel</div>
+                <div class="output-line info">Python Web Terminal v4.0 - ${mode}</div>
+                <div class="output-line info">${modeMessage}</div>
                 <div class="output-line info">🌍 Works with ANY Python script - no modifications needed!</div>
                 <div class="output-line info">💡 When you see a prompt ending with : or ?, the input box will appear automatically</div>
                 <div class="output-line">──────────────────────────────────────────</div>
@@ -1171,8 +1307,11 @@
         
         // Initialize everything when page loads
         window.onload = function() {
+            initializeUI();
             connectWebSocket();
-            refreshFiles();
+            if (fileManagerEnabled) {
+                refreshFiles();
+            }
         };
         
         // Cleanup on page unload
