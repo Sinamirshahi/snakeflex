@@ -1,14 +1,15 @@
-# 🐍 SnakeFlex
+# 🐍 SnakeFlex V4.5
 
 *A modern web-based Python development environment that just works.*
 
-Run any Python script in your browser with real-time output, interactive input support, and comprehensive file management. No modifications to your code required.
+Run any Python script in your browser with real-time output, interactive input support, comprehensive file management, and built-in code editing. No modifications to your code required.
 
 ## ✨ What it does
 
-SnakeFlex creates a beautiful web-based development environment for Python scripts. Think of it as your IDE and terminal combined, but accessible from anywhere with a web browser.
+SnakeFlex V4.5 creates a beautiful web-based development environment for Python scripts. Think of it as your IDE and terminal combined, but accessible from anywhere with a web browser.
 
 * 🌐 **Universal compatibility** - Works with any Python script without code changes
+* 📝 **Built-in code editor** - Edit Python files directly in the browser with syntax awareness
 * 📂 **File manager** - Browse, upload, download, and manage files with drag & drop
 * 🎯 **Dynamic script selection** - Switch between Python scripts with right-click menu
 * 🚀 **No file required** - Start without specifying a script, choose dynamically in the UI
@@ -75,8 +76,9 @@ http://localhost:8090
 
 **🎯 Choose your workflow:**
 1. **Right-click any Python file** → "Set as Executable" → Click "Run Script" ✨
-2. **Start with `--file script.py`** → Click "Run Script" immediately
-3. **Upload Python files** → Right-click to set executable → Run
+2. **Right-click any text file** → "Edit" → Modify code in browser → Save → Run ✨
+3. **Start with `--file script.py`** → Click "Run Script" immediately
+4. **Upload Python files** → Right-click to edit or set executable → Run
 
 ## 📋 Usage
 
@@ -188,6 +190,45 @@ Even in secure mode, you can still switch between existing Python scripts:
 # - No file upload/download, but script switching is available
 ```
 
+## 📝 Built-in Code Editor (NEW in V4.5)
+
+SnakeFlex V4.5 introduces a powerful built-in code editor for seamless development workflow:
+
+### **✨ Editor Features**
+* 🖱️ **Right-click to edit** - Edit any text file directly in the browser
+* ⌨️ **Keyboard shortcuts** - Ctrl+S to save, Escape to close, Tab for proper indentation
+* 🎨 **Syntax-aware** - Monospace font, proper tab handling, and code formatting
+* 🔄 **Auto-save detection** - Warns before closing unsaved changes
+* 📱 **Full-screen editor** - Immersive editing experience with status feedback
+* 🛡️ **Secure** - Same path validation as all file operations
+* 📄 **Multi-format support** - Edit .py, .txt, .js, .html, .css, .json, .md files
+
+### **🚀 Editor Workflow**
+```bash
+# Start SnakeFlex
+./snakeflex
+
+# Edit-Run-Test cycle:
+# 1. Right-click any text file → "Edit"
+# 2. Make changes in the full-screen editor
+# 3. Press Ctrl+S to save (or click Save button)
+# 4. Press Escape to close editor (or click Close button)
+# 5. If it's a Python file: Right-click → "Set as Executable" → Run
+# 6. Repeat for rapid development
+```
+
+### **⌨️ Editor Shortcuts**
+* **Ctrl+S** - Save file
+* **Escape** - Close editor (with unsaved changes warning)
+* **Tab** - Proper indentation (doesn't lose focus)
+
+### **🎯 Perfect for**
+* **Rapid prototyping** - Edit and test scripts without leaving the browser
+* **Educational environments** - Students can edit and run code in one interface
+* **Remote development** - Full development workflow over the web
+* **Code reviews** - Quick edits and testing
+* **Data science** - Modify analysis scripts and run immediately
+
 ## 📂 File Management & Script Selection
 
 *Available in Full Mode only. Use `--disable-file-manager` to disable for security.*
@@ -197,17 +238,20 @@ The most intuitive way to work with Python scripts:
 
 1. **📁 Browse files** - See all Python files in the left sidebar
 2. **🖱️ Right-click any .py file** - Context menu appears
-3. **▶️ Select "Set as Executable"** - Script becomes the active one
-4. **🚀 Click "Run Script"** - Execute the selected script
-5. **🔄 Repeat for different scripts** - Switch anytime without restart
+3. **📝 Edit (NEW)** - Open file in built-in editor for modifications
+4. **▶️ Set as Executable** - Script becomes the active one
+5. **🚀 Click "Run Script"** - Execute the selected script
+6. **🔄 Repeat for different scripts** - Switch anytime without restart
 
 ### **📈 Visual Feedback**
 * **Active script indicator** - Shows currently selected script name
 * **Status updates** - "Ready", "Running", "Waiting for Input" states
 * **File icons** - Python files show 🐍 icon for easy identification
 * **Context menu visibility** - Right-click options adapt to file type
+* **Editor integration** - Seamless transition between editing and running
 
 ### **📁 File Operations**
+* **Edit files** - Built-in code editor for all text files
 * **Browse files** - Tree view of your working directory
 * **Upload files** - Drag & drop or click to upload multiple files
 * **Download files** - One-click download for any file
@@ -217,9 +261,10 @@ The most intuitive way to work with Python scripts:
 
 ### **🎛️ Interface Features**
 * **Resizable sidebar** - Drag the edge to adjust panel width
-* **Context menus** - Right-click files for quick actions
+* **Context menus** - Right-click files for quick actions (Edit, Set Executable, Download, Delete)
 * **Real-time updates** - File list refreshes automatically
 * **Security protection** - Prevents access outside working directory
+* **Full-screen editor** - Distraction-free editing environment
 
 ## 🎨 Template System
 
@@ -270,6 +315,7 @@ Perfect for production environments, shared systems, or when you need maximum se
 * ✅ **Script switching** - Right-click existing Python files to switch between them
 * ❌ **File operations** - Upload, download, create, delete disabled
 * ❌ **File browsing** - Directory listing disabled
+* ❌ **Code editing** - Built-in editor disabled for security
 * ❌ **API endpoints** - All `/api/files/*` routes disabled
 * 🔒 **Zero attack surface** - File management completely removed
 
@@ -288,6 +334,7 @@ docker run -p 8090:8090 snakeflex --disable-file-manager
 Complete development environment with all features:
 
 * ✅ **All terminal functionality**
+* ✅ **Built-in code editor** - Edit files directly in browser
 * ✅ **Complete file management**
 * ✅ **Drag & drop uploads**
 * ✅ **File browsing and organization**
@@ -296,6 +343,8 @@ Complete development environment with all features:
 
 ### **API Endpoints** (Full Mode Only)
 * `GET /api/files` - Browse directory contents
+* `GET /api/files/content?path=file.py` - Read file content for editing
+* `PUT /api/files/content` - Save edited file content
 * `GET /api/files/download?path=file.py` - Download files
 * `POST /api/files/upload` - Upload multiple files
 * `POST /api/files/create` - Create new files/folders
@@ -306,16 +355,18 @@ Complete development environment with all features:
 ## 🎯 Perfect for
 
 ### **Development & Education** (Full Mode)
-* **Education** - Teaching Python with file management and easy script switching
-* **Demos** - Showing off multiple projects with one-click switching
-* **Remote development** - Full file management without SSH
-* **Data science** - Upload datasets, test different scripts, download results
-* **Workshops** - Students can upload, switch between, and test multiple scripts
-* **Experimentation** - Quickly test different Python files in the same environment
+* **Education** - Teaching Python with file management, editing, and easy script switching
+* **Demos** - Showing off multiple projects with live editing and one-click switching
+* **Remote development** - Full file management and editing without SSH
+* **Data science** - Upload datasets, edit analysis scripts, test different approaches, download results
+* **Workshops** - Students can upload, edit, switch between, and test multiple scripts
+* **Experimentation** - Quickly edit and test different Python files in the same environment
+* **Code reviews** - Live editing and testing during review sessions
+* **Pair programming** - Collaborative editing and immediate execution
 
 ### **Production & Security** (Secure Mode)
 * **Production deployment** - Secure Python script execution with script flexibility
-* **Shared environments** - Multiple users can switch between approved scripts
+* **Shared environments** - Multiple users can switch scripts without file access risks
 * **Container deployment** - Minimal attack surface with script selection
 * **Corporate environments** - Compliant with security policies
 * **Educational restrictions** - Students can run different scripts but not modify files
@@ -325,12 +376,12 @@ Complete development environment with all features:
 
 SnakeFlex compiles to a single binary with **embedded templates** and no dependencies (except Python on the target system). Perfect for:
 
-* **Instant deployment** - Single binary with built-in interface
-* **Multi-script sharing** - Upload a folder of Python scripts, users can switch between them
-* **Educational environments** - Complete development environment with script flexibility
-* **Client presentations** - Demonstrate multiple Python scripts without restart
-* **Remote execution** - Lightweight server for Python development
-* **Workshop distribution** - One-click setup with multiple example scripts
+* **Instant deployment** - Single binary with built-in interface and editor
+* **Multi-script sharing** - Upload a folder of Python scripts, users can edit and switch between them
+* **Educational environments** - Complete development environment with editing and script flexibility
+* **Client presentations** - Edit and demonstrate multiple Python scripts without restart
+* **Remote execution** - Lightweight server for Python development with editing capabilities
+* **Workshop distribution** - One-click setup with editable example scripts
 * **Secure deployment** - Production-ready with script selection flexibility
 
 ### **📋 Distribution Examples**
@@ -346,7 +397,7 @@ cp *.py python-demos/          # All your Python scripts
 cp -r data/ python-demos/      # Include data directories
 echo './snakeflex' > python-demos/start.sh  # No specific file - choose in UI
 chmod +x python-demos/start.sh
-# Users right-click any Python file to run it!
+# Users right-click any Python file to edit or run it!
 
 # Workshop package with multiple examples
 mkdir workshop-materials
@@ -355,7 +406,7 @@ cp beginner.py intermediate.py advanced.py workshop-materials/
 cp -r examples/ workshop-materials/
 echo './snakeflex --port 8080' > workshop-materials/start.sh
 chmod +x workshop-materials/start.sh
-# Instructors and students can switch between difficulty levels
+# Instructors and students can edit and switch between difficulty levels
 
 # Production package with multiple scripts (secure mode)
 mkdir secure-deployment
@@ -363,23 +414,24 @@ cp snakeflex secure-deployment/
 cp script1.py script2.py script3.py secure-deployment/
 echo './snakeflex --disable-file-manager --port 8080' > secure-deployment/start.sh
 chmod +x secure-deployment/start.sh
-# Users can switch between approved scripts securely
+# Users can switch between approved scripts securely (no editing)
 
 # Package and distribute
-zip -r python-demos.zip python-demos/           # Multi-script, always works
-zip -r workshop-materials.zip workshop-materials/   # Educational package
-zip -r secure-deployment.zip secure-deployment/     # Production secure
+zip -r python-demos.zip python-demos/           # Multi-script with editor, always works
+zip -r workshop-materials.zip workshop-materials/   # Educational package with editing
+zip -r secure-deployment.zip secure-deployment/     # Production secure (no editing)
 ```
 
 ## 🔧 How it works
 
-SnakeFlex uses WebSockets for real-time bidirectional communication between your browser and Python process, plus a REST API for file management operations (when enabled). It automatically detects when your script needs input and presents a clean interface for interaction.
+SnakeFlex uses WebSockets for real-time bidirectional communication between your browser and Python process, plus a REST API for file management and editing operations (when enabled). It automatically detects when your script needs input and presents a clean interface for interaction.
 
 The Go server intelligently detects your system's Python installation (`python`, `python3`, or `py`) and runs scripts with proper buffering settings to ensure real-time output. The embedded template system ensures the interface always works, while custom templates allow for branding and customization.
 
 **Architecture:**
 * **WebSocket connection** - Real-time terminal communication
-* **REST API** - File management operations (optional)
+* **REST API** - File management and editing operations (optional)
+* **Built-in code editor** - Browser-based editing with syntax awareness
 * **Dynamic script selection** - Switch between Python files without restart
 * **Embedded templates** - Built-in interface with custom override support
 * **Security layer** - Path validation, access control, and feature disabling
@@ -387,15 +439,31 @@ The Go server intelligently detects your system's Python installation (`python`,
 
 ## 🎨 Features in action
 
-**Dynamic script selection:**
+**Dynamic script selection with editing:**
 
 ```bash
 # Start SnakeFlex
 ./snakeflex
 
-# In browser: right-click game.py → "Set as Executable" → Run
-# Later: right-click data_analysis.py → "Set as Executable" → Run  
-# Switch between scripts instantly without restarting server
+# In browser: 
+# 1. Right-click game.py → "Edit" → Modify code → Save → "Set as Executable" → Run
+# 2. Later: Right-click data_analysis.py → "Edit" → Update algorithm → Save → "Set as Executable" → Run  
+# 3. Switch and edit between scripts instantly without restarting server
+```
+
+**Code editing workflow:**
+
+```python
+# Edit this directly in the browser:
+def calculate_fibonacci(n):
+    # Right-click this file → Edit → Modify this function → Save → Run
+    if n <= 1:
+        return n
+    return calculate_fibonacci(n-1) + calculate_fibonacci(n-2)
+
+# Edit parameters and see results immediately
+for i in range(10):
+    print(f"fib({i}) = {calculate_fibonacci(i)}")
 ```
 
 **Interactive input detection:**
@@ -418,12 +486,17 @@ for i in range(5):
 
 ```python
 # Upload data.csv through the file manager
+# Edit this script in the browser
 import pandas as pd
 df = pd.read_csv('data.csv')  # File is now available to your script
 print(df.head())
 
+# Make changes to the analysis right in the browser
+df_filtered = df[df['value'] > 100]  # Edit this filtering logic live
+print(f"Filtered rows: {len(df_filtered)}")
+
 # Results can be saved and downloaded
-df.to_csv('results.csv')  # Use file manager to download results
+df_filtered.to_csv('results.csv')  # Use file manager to download results
 ```
 
 **Error handling:**
@@ -436,9 +509,9 @@ raise Exception("Errors are highlighted")
 
 ### 🖼️ Screenshot
 
-![Screenshot of SnakeFlex Interface](screenshot.png)
+![Screenshot of SnakeFlex V4.5 Interface](screenshot.png)
 
-*Interface showing dynamic script selection, file manager panel (Full Mode), and secure terminal-only mode*
+*Interface showing built-in code editor, dynamic script selection, file manager panel (Full Mode), and secure terminal-only mode*
 
 ## 🔧 Requirements
 
@@ -470,18 +543,20 @@ SnakeFlex includes comprehensive security measures:
 * **Safe uploads** - File uploads are restricted to working directory
 * **Template security** - Embedded templates prevent template injection attacks
 * **Script validation** - Only Python files can be set as executable
+* **Editor security** - File editing restricted to working directory with path validation
 
 ### **Enhanced Security Mode** (`--disable-file-manager`)
-* **Eliminated attack surface** - File management endpoints completely removed
+* **Eliminated attack surface** - File management and editing endpoints completely removed
 * **API endpoint disabling** - All `/api/files/*` routes return 403 Forbidden
 * **UI adaptation** - Interface clearly shows secure mode status
 * **Script switching maintained** - Users can still switch between existing Python scripts
+* **No file editing** - Built-in editor disabled in secure mode
 * **Defense in depth** - Multiple layers of validation even when disabled
 * **Production ready** - Suitable for corporate and shared environments
 
 ### **When to Use Secure Mode**
 * ✅ **Production deployments** - Reduce attack surface while maintaining script flexibility
-* ✅ **Shared systems** - Multiple users can switch scripts without file access risks
+* ✅ **Shared systems** - Multiple users can switch scripts without file access or editing risks
 * ✅ **Educational restrictions** - Students can run different scripts but not modify files
 * ✅ **Container deployment** - Minimal security footprint
 * ✅ **Corporate compliance** - Meet security policy requirements
@@ -505,9 +580,11 @@ Found a bug? Have an idea? Pull requests are welcome!
 * Large output bursts are throttled to prevent WebSocket flooding
 * File uploads are limited to 500MB by default (Full Mode only)
 * Hidden files and system directories (`.git`, `__pycache__`) are filtered from the file browser
-* Secure mode completely disables file management - script switching still available
+* Secure mode completely disables file management and editing - script switching still available
 * Custom templates must be present at startup (embedded template used as fallback)
 * Only Python (.py) files can be set as executable scripts
+* Editor supports text files but syntax highlighting is basic
+* Large files may be slow to load in the editor
 
 ## 💡 Pro tips
 
@@ -517,6 +594,15 @@ Found a bug? Have an idea? Pull requests are welcome!
 * **Check the active script indicator** to see which script will run
 * **Upload multiple scripts** and test them all in the same session
 * **Use descriptive filenames** - they show clearly in the file manager
+
+### Editor Tips (NEW in V4.5)
+* **Use Ctrl+S** frequently to save your work
+* **Tab key works properly** - doesn't lose editor focus
+* **Escape key** closes editor with unsaved change warnings
+* **Edit-Save-Run cycle** - Modify code, save, set executable, run immediately
+* **Multiple file types** - Edit .py, .txt, .js, .html, .css, .json, .md files
+* **Full-screen editing** - Distraction-free coding environment
+* **Status feedback** - Always know if your file saved successfully
 
 ### Template Tips
 * **Use embedded templates** for zero-dependency distribution
@@ -532,8 +618,9 @@ Found a bug? Have an idea? Pull requests are welcome!
 * Use `--verbose` flag to debug script execution and template loading
 
 ### File Management Tips (Full Mode Only)
+* **Edit first, then run** - Right-click file → Edit → Modify → Save → Set Executable → Run
 * **Drag and drop** files directly into the upload area for quick uploads
-* **Right-click files** to access script selection, download, and delete options
+* **Right-click files** to access editing, script selection, download, and delete options
 * **Resize the sidebar** by dragging the right edge for more space
 * **Use the refresh button** (🔄) to update the file list after external changes
 * **Create folders first**, then upload files to organize your workspace
@@ -546,28 +633,30 @@ Found a bug? Have an idea? Pull requests are welcome!
 * **Monitor logs** with `--verbose` in secure environments
 * **Container isolation** - Run in Docker for additional security layers
 * **Network restrictions** - Use firewall rules to limit access
+* **Secure mode disables editing** - No file modifications possible
 
 ### Development Tips
 * Built binaries are portable with embedded templates - no external files needed
 * Multiple concurrent output streams are handled safely (stdout + stderr)
-* File operations provide real-time feedback in the terminal (Full Mode)
+* File operations and editing provide real-time feedback in the terminal (Full Mode)
 * The current Python script file is protected from accidental deletion
-* Secure mode provides the same terminal experience with zero file management risk
+* Secure mode provides the same terminal experience with zero file management or editing risk
 * Custom templates override embedded ones automatically
 * Dynamic script selection eliminates the need to restart for different files
+* Editor changes are saved immediately - no auto-save delays
 
 ## 🎉 Acknowledgments
 
-Inspired by the need for a complete, browser-based Python development environment that works everywhere while maintaining security flexibility. Built with love for the Python community and educators who need powerful, accessible, and secure tools with zero-dependency distribution and flexible script management.
+Inspired by the need for a complete, browser-based Python development environment that works everywhere while maintaining security flexibility. Built with love for the Python community and educators who need powerful, accessible, and secure tools with zero-dependency distribution, flexible script management, and seamless code editing capabilities.
 
 ## 🗺️ Roadmap
 
 ### **Near Term**
-* 📝 **Inline file editing** - Edit files directly in the browser (Full Mode)
-* 🎨 **Syntax highlighting** - Code highlighting for Python files
+* 🎨 **Syntax highlighting** - Full Python syntax highlighting in the editor
 * 🔍 **File search** - Quick file finding in large projects
 * 📊 **Script history** - Remember recently executed scripts
 * ⚡ **Quick script switching** - Keyboard shortcuts for common scripts
+* 📝 **Editor improvements** - Line numbers, find/replace, better indentation
 
 ### **Future Enhancements**
 * 📁 **Folder navigation** - Navigate into subdirectories
@@ -578,7 +667,10 @@ Inspired by the need for a complete, browser-based Python development environmen
 * 🐳 **Docker images** - Pre-built containers for easy deployment
 * 🎨 **Template gallery** - Community-contributed interface themes
 * 🏷️ **Script categories** - Organize scripts by type/purpose
+* 📝 **Advanced editor** - Code completion, error detection, multiple tabs
+* 🔗 **Git integration** - Version control support
+* 📱 **Mobile optimization** - Better mobile browser support
 
 ---
 
-*Made with ❤️ and ☕. Secure by design, powerful by choice, embeds beautifully.*
+*Made with ❤️ and ☕. Secure by design, powerful by choice, edits beautifully.*
