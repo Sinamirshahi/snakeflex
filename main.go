@@ -264,6 +264,7 @@ func main() {
 
 	if server.fileManagerEnabled {
 		http.HandleFunc("/api/files", server.filesHandler)
+		http.HandleFunc("/api/files/content", server.fileContentHandler)
 		http.HandleFunc("/api/files/download", server.downloadHandler)
 		http.HandleFunc("/api/files/upload", server.uploadHandler)
 		http.HandleFunc("/api/files/create", server.createHandler)
@@ -335,6 +336,90 @@ func (ts *TerminalServer) filesHandler(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(APIResponse{Success: true, Data: files})
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (ts *TerminalServer) fileContentHandler(w http.ResponseWriter, r *http.Request) {
+	if !ts.fileManagerEnabled {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "File management disabled"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	switch r.Method {
+	case "GET":
+		// Read file content
+		filePath := r.URL.Query().Get("path")
+		if filePath == "" {
+			json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Path parameter required"})
+			return
+		}
+
+		fullPath := filepath.Join(ts.workingDir, filePath)
+		absPath, err := filepath.Abs(fullPath)
+		if err != nil || !strings.HasPrefix(absPath, ts.workingDir) {
+			json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Invalid path"})
+			return
+		}
+
+		// Check if file exists and is not a directory
+		info, err := os.Stat(absPath)
+		if err != nil {
+			json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "File not found"})
+			return
+		}
+		if info.IsDir() {
+			json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Cannot read directory content"})
+			return
+		}
+
+		content, err := os.ReadFile(absPath)
+		if err != nil {
+			json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Failed to read file: " + err.Error()})
+			return
+		}
+
+		json.NewEncoder(w).Encode(APIResponse{
+			Success: true,
+			Data:    map[string]string{"content": string(content)},
+		})
+
+	case "PUT":
+		// Save file content
+		var req struct {
+			Path    string `json:"path"`
+			Content string `json:"content"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Invalid request body"})
+			return
+		}
+
+		if req.Path == "" {
+			json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Path is required"})
+			return
+		}
+
+		fullPath := filepath.Join(ts.workingDir, req.Path)
+		absPath, err := filepath.Abs(fullPath)
+		if err != nil || !strings.HasPrefix(absPath, ts.workingDir) {
+			json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Invalid path"})
+			return
+		}
+
+		err = os.WriteFile(absPath, []byte(req.Content), 0644)
+		if err != nil {
+			json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Failed to save file: " + err.Error()})
+			return
+		}
+
+		json.NewEncoder(w).Encode(APIResponse{Success: true, Message: "File saved successfully"})
+
+	default:
+		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Method not allowed"})
 	}
 }
 

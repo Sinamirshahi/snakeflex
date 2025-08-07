@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Python Web Terminal</title>
+    <title>Snakeflex V4.5 - Python Web Terminal</title>
     <style>
         * {
             margin: 0;
@@ -481,6 +481,102 @@
         .modal-btn.primary:hover { background: #2ea043; }
         .modal-btn.secondary { background: #6e7681; color: white; }
         .modal-btn.secondary:hover { background: #7d8590; }
+
+        /* Editor Styles */
+        .editor-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 3000;
+        }
+
+        .editor-content {
+            position: absolute;
+            top: 5%;
+            left: 5%;
+            width: 90%;
+            height: 90%;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .editor-header {
+            background: #21262d;
+            padding: 12px 20px;
+            border-bottom: 1px solid #30363d;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 8px 8px 0 0;
+        }
+
+        .editor-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #c9d1d9;
+        }
+
+        .editor-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .editor-textarea {
+            flex: 1;
+            background: #0d1117;
+            color: #c9d1d9;
+            border: none;
+            padding: 20px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            resize: none;
+            outline: none;
+            tab-size: 4;
+        }
+
+        .editor-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .editor-btn.save {
+            background: #238636;
+            color: white;
+        }
+
+        .editor-btn.save:hover {
+            background: #2ea043;
+        }
+
+        .editor-btn.cancel {
+            background: #6e7681;
+            color: white;
+        }
+
+        .editor-btn.cancel:hover {
+            background: #7d8590;
+        }
+
+        .editor-status {
+            background: #161b22;
+            padding: 8px 20px;
+            border-top: 1px solid #30363d;
+            font-size: 12px;
+            color: #7d8590;
+            border-radius: 0 0 8px 8px;
+        }
         
         .hidden { display: none !important; }
         ::-webkit-scrollbar { width: 8px; }
@@ -494,7 +590,7 @@
         <div class="header">
             <div class="header-title">
                 <span>🐍</span>
-                <span id="headerTitle">Python Web Terminal</span>
+                <span id="headerTitle">Snakeflex V4.5 - Python Web Terminal</span>
             </div>
             <div class="header-controls">
                 <button class="control-btn close"></button>
@@ -561,6 +657,7 @@
     <input type="file" id="fileInput" multiple style="display: none;" onchange="uploadFiles()">
     
     <div class="context-menu" id="contextMenu">
+        <div class="context-menu-item" id="contextMenuEdit" onclick="editFile()">📝 Edit</div>
         <div class="context-menu-item" id="contextMenuSetExec" onclick="setExecutable()">▶️ Set as Executable</div>
         <div class="context-menu-separator" id="contextMenuSeparator"></div>
         <div class="context-menu-item" onclick="downloadFile()">📥 Download</div>
@@ -574,6 +671,22 @@
             <div class="modal-buttons">
                 <button class="modal-btn secondary" onclick="closeCreateModal()">Cancel</button>
                 <button class="modal-btn primary" onclick="createItem()">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="editor-modal" id="editorModal">
+        <div class="editor-content">
+            <div class="editor-header">
+                <div class="editor-title" id="editorTitle">📝 Editing: filename.py</div>
+                <div class="editor-actions">
+                    <button class="editor-btn save" onclick="saveFile()">💾 Save</button>
+                    <button class="editor-btn cancel" onclick="closeEditor()">❌ Close</button>
+                </div>
+            </div>
+            <textarea class="editor-textarea" id="editorTextarea" placeholder="Loading..."></textarea>
+            <div class="editor-status" id="editorStatus">
+                Press Ctrl+S to save • Press Escape to close
             </div>
         </div>
     </div>
@@ -592,10 +705,14 @@
         let executableFile = '{{INITIAL_PYTHON_FILE}}';
         const fileManagerEnabled = {{FILE_MANAGER_ENABLED}};
 
+        // Editor-related variables
+        let currentEditingFile = null;
+        let originalContent = '';
+
         function initializeUI() {
             if (!fileManagerEnabled) {
                 document.getElementById('sidebar')?.classList.add('hidden');
-                document.getElementById('headerTitle').textContent = 'Python Web Terminal - Secure Mode';
+                document.getElementById('headerTitle').textContent = 'Snakeflex V4.5 - Python Web Terminal (Secure Mode)';
                 window.refreshFiles = () => {};
                 window.showCreateModal = () => addOutput('❌ File management disabled', 'stderr');
             }
@@ -656,8 +773,26 @@
             selectFile(path, isDir); 
             
             const menu = document.getElementById('contextMenu');
+            const editItem = document.getElementById('contextMenuEdit');
             const setExecItem = document.getElementById('contextMenuSetExec');
             const separator = document.getElementById('contextMenuSeparator');
+            
+            // Show edit option for all text files, not just Python
+            const isEditableFile = !isDir && (
+                path.toLowerCase().endsWith('.py') ||
+                path.toLowerCase().endsWith('.txt') ||
+                path.toLowerCase().endsWith('.js') ||
+                path.toLowerCase().endsWith('.html') ||
+                path.toLowerCase().endsWith('.css') ||
+                path.toLowerCase().endsWith('.json') ||
+                path.toLowerCase().endsWith('.md')
+            );
+            
+            if (isEditableFile) {
+                editItem.style.display = 'block';
+            } else {
+                editItem.style.display = 'none';
+            }
             
             if (!isDir && path.toLowerCase().endsWith('.py')) {
                 setExecItem.style.display = 'block';
@@ -673,6 +808,89 @@
         }
 
         document.addEventListener('click', () => document.getElementById('contextMenu').style.display = 'none');
+
+        async function editFile() {
+            if (!selectedFile || selectedFile.isDir) return;
+            
+            try {
+                const response = await fetch(`/api/files/content?path=${encodeURIComponent(selectedFile.path)}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentEditingFile = selectedFile.path;
+                    originalContent = result.data.content;
+                    
+                    document.getElementById('editorTitle').textContent = `📝 Editing: ${selectedFile.path}`;
+                    document.getElementById('editorTextarea').value = result.data.content;
+                    document.getElementById('editorModal').style.display = 'block';
+                    
+                    // Focus the textarea after a short delay
+                    setTimeout(() => {
+                        document.getElementById('editorTextarea').focus();
+                    }, 100);
+                    
+                } else {
+                    addOutput(`❌ Failed to load file: ${result.message}`, 'stderr');
+                }
+            } catch (error) {
+                addOutput(`❌ Error loading file: ${error.message}`, 'stderr');
+            }
+        }
+
+        async function saveFile() {
+            if (!currentEditingFile) return;
+            
+            const content = document.getElementById('editorTextarea').value;
+            const statusEl = document.getElementById('editorStatus');
+            
+            try {
+                statusEl.textContent = 'Saving...';
+                
+                const response = await fetch('/api/files/content', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        path: currentEditingFile,
+                        content: content
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    originalContent = content;
+                    statusEl.textContent = 'File saved successfully!';
+                    addOutput(`✅ Saved: ${currentEditingFile}`, 'success');
+                    
+                    // Reset status after 2 seconds
+                    setTimeout(() => {
+                        statusEl.textContent = 'Press Ctrl+S to save • Press Escape to close';
+                    }, 2000);
+                } else {
+                    statusEl.textContent = `Save failed: ${result.message}`;
+                    addOutput(`❌ Save failed: ${result.message}`, 'stderr');
+                }
+            } catch (error) {
+                statusEl.textContent = `Save error: ${error.message}`;
+                addOutput(`❌ Save error: ${error.message}`, 'stderr');
+            }
+        }
+
+        function closeEditor() {
+            const currentContent = document.getElementById('editorTextarea').value;
+            
+            if (currentContent !== originalContent) {
+                if (!confirm('You have unsaved changes. Are you sure you want to close?')) {
+                    return;
+                }
+            }
+            
+            document.getElementById('editorModal').style.display = 'none';
+            currentEditingFile = null;
+            originalContent = '';
+        }
 
         function downloadFileByPath(path) {
             const link = document.createElement('a');
@@ -972,6 +1190,39 @@
             `;
             lastLineElement = null;
         }
+
+        // Add keyboard shortcuts for the editor
+        document.addEventListener('keydown', function(event) {
+            const editorModal = document.getElementById('editorModal');
+            
+            if (editorModal.style.display === 'block') {
+                // Ctrl+S to save
+                if (event.ctrlKey && event.key === 's') {
+                    event.preventDefault();
+                    saveFile();
+                }
+                
+                // Escape to close
+                if (event.key === 'Escape') {
+                    closeEditor();
+                }
+                
+                // Tab handling in textarea
+                if (event.key === 'Tab') {
+                    const textarea = document.getElementById('editorTextarea');
+                    if (document.activeElement === textarea) {
+                        event.preventDefault();
+                        
+                        const start = textarea.selectionStart;
+                        const end = textarea.selectionEnd;
+                        
+                        // Insert tab character
+                        textarea.value = textarea.value.substring(0, start) + '\t' + textarea.value.substring(end);
+                        textarea.selectionStart = textarea.selectionEnd = start + 1;
+                    }
+                }
+            }
+        });
 
         window.onload = function() {
             initializeUI();
