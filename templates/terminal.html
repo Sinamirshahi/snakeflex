@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Snakeflex V4.5 - Python Web Terminal</title>
+    <title>Snakeflex V4.6 - Python Web Terminal</title>
     <style>
         * {
             margin: 0;
@@ -584,19 +584,17 @@
         ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #484f58; }
     </style>
-<!-- CodeMirror core -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/codemirror.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/codemirror.min.js"></script>
 
-<!-- Theme (optional) -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/theme/material-darker.min.css">
 
-<!-- Modes -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/mode/python/python.min.js"></script>
 
-<!-- Addons -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/addon/edit/closebrackets.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/addon/edit/matchbrackets.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/addon/hint/show-hint.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/addon/hint/show-hint.min.js"></script>
 <style>
 .CodeMirror {
     height: 100%;
@@ -604,6 +602,38 @@
     font-size: 14px;
     background: #0d1117;
     color: #c9d1d9;
+}
+/* Style for the hint dropdown */
+.CodeMirror-hints {
+  position: absolute;
+  /* THIS IS THE FIX: Set z-index higher than the editor modal (3000) */
+  z-index: 3001;
+  overflow: hidden;
+  list-style: none;
+  margin: 0;
+  padding: 2px;
+  box-shadow: 2px 3px 5px rgba(0,0,0,.2);
+  border-radius: 3px;
+  border: 1px solid #30363d;
+  background: #21262d;
+  font-size: 13px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  max-height: 20em;
+  overflow-y: auto;
+}
+
+.CodeMirror-hint {
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 2px;
+  white-space: pre;
+  color: #c9d1d9;
+  cursor: pointer;
+}
+
+li.CodeMirror-hint-active {
+  background: #1f6feb;
+  color: white;
 }
 </style>
 </head>
@@ -730,10 +760,86 @@
         // Editor-related variables
         let currentEditingFile = null;
         let originalContent = '';
-
-        
         let cm = null; // CodeMirror instance
-function initializeUI() {
+
+        // --- AUTOCOMPLETE LOGIC START ---
+        // Minimal Python keywords + builtins
+        const PY_KEYWORDS = [
+          "and","as","assert","async","await","break","class","continue","def","del","elif","else","except",
+          "False","finally","for","from","global","if","import","in","is","lambda","None","nonlocal","not",
+          "or","pass","raise","return","True","try","while","with","yield"
+        ];
+        const PY_BUILTINS = [
+          "abs","all","any","ascii","bin","bool","bytearray","bytes","callable","chr","classmethod",
+          "compile","complex","dict","dir","divmod","enumerate","eval","exec","filter","float","format",
+          "frozenset","getattr","globals","hasattr","hash","help","hex","id","input","int","isinstance",
+          "issubclass","iter","len","list","locals","map","max","memoryview","min","next","object","oct",
+          "open","ord","pow","print","property","range","repr","reversed","round","set","setattr","slice",
+          "sorted","staticmethod","str","sum","super","tuple","type","vars","zip","__import__"
+        ];
+
+        // Build a set of tokens from the current buffer for “smart-ish” local hints
+        function collectDocumentIdentifiers(cm) {
+          const text = cm.getValue();
+          const words = text.match(/[A-Za-z_][A-Za-z0-9_]*/g) || [];
+          // Filter out very short words and duplicates
+          const set = new Set(words.filter(w => w.length >= 3));
+          // Avoid flooding with keywords again
+          PY_KEYWORDS.concat(PY_BUILTINS).forEach(w => set.delete(w));
+          return Array.from(set).slice(0, 500); // Limit to 500 suggestions
+        }
+
+        // The actual hinter function
+        function pythonHint(cm, options) {
+          const cur = cm.getCursor();
+          const token = cm.getTokenAt(cur);
+          const start = token.start, end = cur.ch;
+          const line = cm.getLine(cur.line);
+
+          // Compute the current prefix
+          let prefix = token.string;
+          const word = /[A-Za-z_][A-Za-z0-9_]*/;
+          if (!word.test(prefix)) {
+            // Try the char before cursor if we are not in a word
+            const m = line.slice(0, end).match(/[A-Za-z_][A-Za-z0-9_]*$/);
+            prefix = m ? m[0] : "";
+          } else {
+             prefix = prefix.slice(0, end - start);
+          }
+          
+          if (prefix.length < 1 && line[end-1] !== '.') return null;
+
+          const pool = []
+            .concat(PY_KEYWORDS, PY_BUILTINS, collectDocumentIdentifiers(cm))
+            .filter(s => s.startsWith(prefix) && s !== prefix);
+
+          const from = { line: cur.line, ch: end - prefix.length };
+          const to   = { line: cur.line, ch: end };
+
+          if (pool.length === 0) return null;
+
+          return { list: pool.sort(), from, to };
+        }
+
+        // Helper: show hints if possible
+        function maybeShowHints(cm) {
+          // Only in Python mode
+          const mode = cm.getOption('mode');
+          if (mode !== 'python') return;
+
+          // Guard against addon not loading
+          if (typeof cm.showHint !== 'function') return;
+
+          cm.showHint({
+            hint: pythonHint,
+            completeSingle: false, // Don’t auto-commit single result; show the menu
+            alignWithWord: true,
+            closeCharacters: /[\s()\[\]{};:=,+\-*/%&|^~!<>?]/
+          });
+        }
+        // --- AUTOCOMPLETE LOGIC END ---
+        
+        function initializeUI() {
             if (!fileManagerEnabled) {
                 document.getElementById('sidebar')?.classList.add('hidden');
                 document.getElementById('headerTitle').textContent = 'Snakeflex V4.5 - Python Web Terminal (Secure Mode)';
@@ -801,7 +907,6 @@ function initializeUI() {
             const setExecItem = document.getElementById('contextMenuSetExec');
             const separator = document.getElementById('contextMenuSeparator');
             
-            // Show edit option for all text files, not just Python
             const isEditableFile = !isDir && (
                 path.toLowerCase().endsWith('.py') ||
                 path.toLowerCase().endsWith('.txt') ||
@@ -845,47 +950,71 @@ function initializeUI() {
                     originalContent = result.data.content;
                     
                     document.getElementById('editorTitle').textContent = `📝 Editing: ${selectedFile.path}`;
-                    document.getElementById('editorTextarea').value = result.data.content;
                     document.getElementById('editorModal').style.display = 'block';
                     
-                    
+                    const ta = document.getElementById('editorTextarea');
+                    ta.value = result.data.content; // Set value before initializing CM
+                    const isPy = currentEditingFile.toLowerCase().endsWith('.py');
 
-// Initialize or update CodeMirror
-const ta = document.getElementById('editorTextarea');
-const isPy = currentEditingFile.toLowerCase().endsWith('.py');
-if (!cm) {
-    cm = CodeMirror.fromTextArea(ta, {
-        mode: isPy ? 'python' : null,
-        theme: 'material-darker',
-        lineNumbers: true,
-        indentUnit: 4,
-        tabSize: 4,
-        indentWithTabs: false,
-        smartIndent: true,
-        matchBrackets: true,
-        autoCloseBrackets: true
-    });
-    cm.addKeyMap({
-        'Ctrl-S': () => saveFile(),
-        'Cmd-S':  () => saveFile(),
-        'Esc':    () => closeEditor()
-    });
-    cm.on('beforeChange', (instance, changeObj) => {
-        if (!currentEditingFile?.toLowerCase().endsWith('.py')) return;
-        if (changeObj.origin === '+input') {
-            const text = changeObj.text.map(line => line.replace(/\t/g, ' '.repeat(4)));
-            if (text.join('\n') !== changeObj.text.join('\n')) {
-                changeObj.update(changeObj.from, changeObj.to, text, changeObj.origin);
-            }
-        }
-    });
-} else {
-    cm.setValue(result.data.content);
-    cm.setOption('mode', isPy ? 'python' : null);
-    cm.setOption('indentWithTabs', isPy ? false : cm.getOption('indentWithTabs'));
-}
-setTimeout(() => cm.refresh() || cm.focus(), 50);
-} else {
+                    if (!cm) {
+                        cm = CodeMirror.fromTextArea(ta, {
+                            mode: isPy ? 'python' : null,
+                            theme: 'material-darker',
+                            lineNumbers: true,
+                            indentUnit: 4,
+                            tabSize: 4,
+                            indentWithTabs: false,
+                            smartIndent: true,
+                            matchBrackets: true,
+                            autoCloseBrackets: true
+                        });
+
+                        // --- UPDATED KEYMAP AND EVENT LISTENER ---
+                        cm.addKeyMap({
+                          'Ctrl-S': () => saveFile(),
+                          'Cmd-S':  () => saveFile(),
+                          'Esc':    () => closeEditor(),
+                          'Ctrl-Space': () => maybeShowHints(cm),
+                          'Tab': (cm) => {
+                              // If hint menu is open, accept the selection; otherwise do normal indent
+                              const widget = cm.state.completionActive;
+                              if (widget) {
+                                cm.state.completionActive.pick();
+                              } else {
+                                cm.execCommand('defaultTab');
+                              }
+                          }
+                        });
+                        
+                        // Trigger on typing and on dot access
+                        cm.on('inputRead', (instance, changeObj) => {
+                          if (!currentEditingFile?.toLowerCase().endsWith('.py')) return;
+                          // Don't trigger on backspace or enter
+                          if (changeObj.origin === "+delete" || changeObj.origin === "complete") return;
+                          const typed = changeObj.text?.join('') ?? '';
+                          if (/\w/.test(typed) || typed === '.') {
+                            maybeShowHints(cm);
+                          }
+                        });
+                        // --- END OF UPDATES ---
+                        
+                        cm.on('beforeChange', (instance, changeObj) => {
+                            if (!currentEditingFile?.toLowerCase().endsWith('.py')) return;
+                            if (changeObj.origin === '+input') {
+                                const text = changeObj.text.map(line => line.replace(/\t/g, ' '.repeat(4)));
+                                if (text.join('\n') !== changeObj.text.join('\n')) {
+                                    changeObj.update(changeObj.from, changeObj.to, text, changeObj.origin);
+                                }
+                            }
+                        });
+
+                    } else {
+                        cm.setValue(result.data.content);
+                        cm.setOption('mode', isPy ? 'python' : null);
+                        cm.setOption('indentWithTabs', isPy ? false : cm.getOption('indentWithTabs'));
+                    }
+                    setTimeout(() => cm.refresh() || cm.focus(), 50);
+                } else {
                     addOutput(`❌ Failed to load file: ${result.message}`, 'stderr');
                 }
             } catch (error) {
@@ -905,13 +1034,8 @@ setTimeout(() => cm.refresh() || cm.focus(), 50);
                 
                 const response = await fetch('/api/files/content', {
                     method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        path: currentEditingFile,
-                        content: content
-                    })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: currentEditingFile, content: content })
                 });
                 
                 const result = await response.json();
@@ -921,10 +1045,7 @@ setTimeout(() => cm.refresh() || cm.focus(), 50);
                     statusEl.textContent = 'File saved successfully!';
                     addOutput(`✅ Saved: ${currentEditingFile}`, 'success');
                     
-                    // Reset status after 2 seconds
-                    setTimeout(() => {
-                        statusEl.textContent = 'Press Ctrl+S to save • Press Escape to close';
-                    }, 2000);
+                    setTimeout(() => { statusEl.textContent = 'Press Ctrl+S to save • Press Escape to close'; }, 2000);
                 } else {
                     statusEl.textContent = `Save failed: ${result.message}`;
                     addOutput(`❌ Save failed: ${result.message}`, 'stderr');
@@ -1216,7 +1337,7 @@ setTimeout(() => cm.refresh() || cm.focus(), 50);
             if (text === '') return;
             const parts = text.split('\n');
             if (parts[0]) {
-                if (lastLineElement) {
+                if (lastLineElement && !text.startsWith('\n')) {
                     lastLineElement.textContent += parts[0];
                 } else {
                     const lineDiv = document.createElement('div');
@@ -1247,40 +1368,7 @@ setTimeout(() => cm.refresh() || cm.focus(), 50);
             `;
             lastLineElement = null;
         }
-
-        // Add keyboard shortcuts for the editor
-        document.addEventListener('keydown', function(event) {
-            const editorModal = document.getElementById('editorModal');
-            
-            if (editorModal.style.display === 'block') {
-                // Ctrl+S to save
-                if (event.ctrlKey && event.key === 's') {
-                    event.preventDefault();
-                    saveFile();
-                }
-                
-                // Escape to close
-                if (event.key === 'Escape') {
-                    closeEditor();
-                }
-                
-                // Tab handling in textarea
-                if (event.key === 'Tab') {
-                    const textarea = document.getElementById('editorTextarea');
-                    if (document.activeElement === textarea) {
-                        event.preventDefault();
-                        
-                        const start = textarea.selectionStart;
-                        const end = textarea.selectionEnd;
-                        
-                        // Insert tab character
-                        textarea.value = textarea.value.substring(0, start) + '\t' + textarea.value.substring(end);
-                        textarea.selectionStart = textarea.selectionEnd = start + 1;
-                    }
-                }
-            }
-        });
-
+        
         window.onload = function() {
             initializeUI();
             clearOutput();
