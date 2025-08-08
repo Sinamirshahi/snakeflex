@@ -1,4 +1,4 @@
-# 🐍 SnakeFlex V4.5
+# 🐍 SnakeFlex V4.6
 
 *A modern web-based Python development environment that just works.*
 
@@ -6,7 +6,7 @@ Run any Python script in your browser with real-time output, interactive input s
 
 ## ✨ What it does
 
-SnakeFlex V4.5 creates a beautiful web-based development environment for Python scripts. Think of it as your IDE and terminal combined, but accessible from anywhere with a web browser.
+SnakeFlex V4.6 creates a beautiful web-based development environment for Python scripts. Think of it as your IDE and terminal combined, but accessible from anywhere with a web browser.
 
 * 🌐 **Universal compatibility** - Works with any Python script without code changes
 * 📝 **Built-in code editor** - Edit Python files directly in the browser with syntax awareness
@@ -192,7 +192,7 @@ Even in secure mode, you can still switch between existing Python scripts:
 
 ## 📝 Built-in Code Editor (NEW in V4.5)
 
-SnakeFlex V4.5 introduces a powerful built-in code editor for seamless development workflow:
+SnakeFlex V4.6 introduces a powerful built-in code editor for seamless development workflow:
 
 ### **✨ Editor Features**
 * 🖱️ **Right-click to edit** - Edit any text file directly in the browser
@@ -509,7 +509,7 @@ raise Exception("Errors are highlighted")
 
 ### 🖼️ Screenshot
 
-![Screenshot of SnakeFlex V4.5 Interface](screenshot.png)
+![Screenshot of SnakeFlex V4.6 Interface](screenshot.png)
 
 *Interface showing built-in code editor, dynamic script selection, file manager panel (Full Mode), and secure terminal-only mode*
 
