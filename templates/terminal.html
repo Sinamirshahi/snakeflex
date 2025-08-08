@@ -29,29 +29,80 @@
         .sidebar.hidden { display: none; }
         .sidebar-header { background: #21262d; padding: 12px 15px; border-bottom: 1px solid #30363d; display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: bold; }
         
-        /* NEW: Navigation Controls */
+        /* Enhanced Navigation Controls */
         .navigation-bar { background: #1c2128; border-bottom: 1px solid #30363d; padding: 8px 15px; display: flex; align-items: center; gap: 8px; }
         .nav-btn { background: #30363d; border: 1px solid #484f58; color: #c9d1d9; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; transition: all 0.2s; display: flex; align-items: center; gap: 4px; }
         .nav-btn:hover { background: #484f58; border-color: #58a6ff; }
         .nav-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .breadcrumb { flex: 1; display: flex; align-items: center; gap: 4px; font-size: 11px; color: #7d8590; }
-        .breadcrumb-item { cursor: pointer; padding: 2px 6px; border-radius: 3px; transition: all 0.2s; }
+        .breadcrumb { flex: 1; display: flex; align-items: center; gap: 4px; font-size: 11px; color: #7d8590; min-width: 0; overflow: hidden; }
+        .breadcrumb-item { cursor: pointer; padding: 2px 6px; border-radius: 3px; transition: all 0.2s; white-space: nowrap; }
         .breadcrumb-item:hover { background: rgba(177, 186, 196, 0.12); color: #c9d1d9; }
         .breadcrumb-item.current { color: #58a6ff; font-weight: bold; }
         .breadcrumb-separator { color: #484f58; margin: 0 2px; }
         
+        /* Enhanced folder navigation hints */
+        .navigation-hint { background: #0d1117; border: 1px solid #30363d; padding: 6px 12px; font-size: 11px; color: #7d8590; border-radius: 0 0 6px 6px; text-align: center; }
+        
         .files-container { flex: 1; overflow-y: auto; padding: 10px 0; }
-        .file-item { display: flex; align-items: center; gap: 8px; padding: 6px 15px; cursor: pointer; font-size: 13px; position: relative; border-radius: 3px; margin: 1px 8px; }
+        .file-item { display: flex; align-items: center; gap: 8px; padding: 6px 15px; cursor: pointer; font-size: 13px; position: relative; border-radius: 3px; margin: 1px 8px; transition: all 0.2s; }
         .file-item:hover { background: rgba(177, 186, 196, 0.12); }
         .file-item.selected { background: #1f6feb; color: white; }
-        .file-item.folder { font-weight: bold; }
-        .file-item.folder:hover { background: rgba(88, 166, 255, 0.15); }
+        
+        /* Enhanced folder styling */
+        .file-item.folder { 
+            font-weight: bold; 
+            border-left: 3px solid transparent; 
+            background: linear-gradient(90deg, rgba(88, 166, 255, 0.05) 0%, transparent 100%);
+        }
+        .file-item.folder:hover { 
+            background: linear-gradient(90deg, rgba(88, 166, 255, 0.15) 0%, rgba(88, 166, 255, 0.05) 100%); 
+            border-left-color: #58a6ff;
+            transform: translateX(2px);
+        }
+        .file-item.folder .file-icon {
+            animation: none;
+            transition: transform 0.2s;
+        }
+        .file-item.folder:hover .file-icon {
+            transform: scale(1.1);
+        }
+        
+        /* Add folder tooltip */
+        .file-item.folder::after {
+            content: "Double-click to enter";
+            position: absolute;
+            right: 15px;
+            font-size: 10px;
+            color: #58a6ff;
+            opacity: 0;
+            transition: opacity 0.2s;
+            pointer-events: none;
+        }
+        .file-item.folder:hover::after {
+            opacity: 0.7;
+        }
+        
         .file-icon { width: 16px; text-align: center; flex-shrink: 0; }
         .file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .file-actions { display: none; gap: 4px; }
         .file-item:hover .file-actions { display: flex; }
-        .action-btn { background: none; border: none; color: #7d8590; cursor: pointer; padding: 2px 4px; border-radius: 3px; font-size: 11px; }
+        .action-btn { background: none; border: none; color: #7d8590; cursor: pointer; padding: 2px 4px; border-radius: 3px; font-size: 11px; transition: all 0.2s; }
         .action-btn:hover { background: rgba(177, 186, 196, 0.2); color: #c9d1d9; }
+        
+        /* Empty folder state */
+        .empty-folder { 
+            padding: 40px 20px; 
+            text-align: center; 
+            color: #7d8590; 
+            font-size: 12px; 
+            line-height: 1.5;
+        }
+        .empty-folder .empty-icon { 
+            font-size: 24px; 
+            margin-bottom: 10px; 
+            opacity: 0.5; 
+        }
+        
         .sidebar-footer { background: #21262d; border-top: 1px solid #30363d; padding: 10px; }
         .upload-area { border: 2px dashed #30363d; border-radius: 6px; padding: 20px; text-align: center; color: #7d8590; font-size: 12px; transition: all 0.3s; cursor: pointer; }
         .upload-area.drag-over { border-color: #1f6feb; background: rgba(31, 111, 235, 0.1); color: #58a6ff; }
@@ -128,6 +179,29 @@
         .CodeMirror-hints { position: absolute; z-index: 3001; overflow: hidden; list-style: none; margin: 0; padding: 2px; box-shadow: 2px 3px 5px rgba(0,0,0,.2); border-radius: 3px; border: 1px solid #30363d; background: #21262d; font-size: 13px; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; max-height: 20em; overflow-y: auto; }
         .CodeMirror-hint { margin: 0; padding: 4px 8px; border-radius: 2px; white-space: pre; color: #c9d1d9; cursor: pointer; }
         li.CodeMirror-hint-active { background: #1f6feb; color: white; }
+        
+        /* Loading animation for navigation */
+        .loading-files {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: #58a6ff;
+            font-size: 12px;
+        }
+        .loading-spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #30363d;
+            border-top: 2px solid #58a6ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -162,7 +236,7 @@
                     </button>
                 </div>
                 
-                <!-- NEW: Navigation Bar -->
+                <!-- Enhanced Navigation Bar -->
                 <div class="navigation-bar" id="navigationBar">
                     <button class="nav-btn" id="upBtn" onclick="navigateUp()" disabled>
                         <span>↑</span>
@@ -175,6 +249,11 @@
                     <div class="breadcrumb" id="breadcrumb">
                         <span class="breadcrumb-item current" onclick="navigateToPath('')">📁 Root</span>
                     </div>
+                </div>
+                
+                <!-- Navigation Hint -->
+                <div class="navigation-hint">
+                    💡 Double-click folders to enter • Use breadcrumb to navigate back
                 </div>
                 
                 <div class="files-container" id="filesContainer"></div>
@@ -194,6 +273,7 @@
             <div class="terminal-container">
                 <div class="terminal-info">
                     <span>📁 Working Directory: {{WORKING_DIR}}</span>
+                    <span id="currentPathInfo" style="margin-left: 20px; color: #58a6ff;"></span>
                 </div>
                 
                 <div class="terminal-output" id="output"></div>
@@ -294,9 +374,10 @@
         const fileManagerEnabled = {{FILE_MANAGER_ENABLED}};
         const shellEnabled = {{SHELL_ENABLED}};
 
-        // NEW: Navigation Variables
-        let currentPath = '';  // Current directory path relative to working directory
+        // Enhanced Navigation Variables
+        let currentPath = '';
         let navigationHistory = [];
+        let isLoadingFiles = false;
 
         // --- Editor Variables ---
         let currentEditingFile = null;
@@ -355,10 +436,11 @@
         });
         // --- SHELL TERMINAL FUNCTIONS END ---
 
-        // --- NEW: NAVIGATION FUNCTIONS START ---
+        // --- ENHANCED NAVIGATION FUNCTIONS START ---
         function updateBreadcrumb() {
             const breadcrumb = document.getElementById('breadcrumb');
             const upBtn = document.getElementById('upBtn');
+            const currentPathInfo = document.getElementById('currentPathInfo');
             
             // Clear existing breadcrumb
             breadcrumb.innerHTML = '';
@@ -369,6 +451,9 @@
             homeItem.textContent = '📁 Root';
             homeItem.onclick = () => navigateToPath('');
             breadcrumb.appendChild(homeItem);
+            
+            // Update current path info
+            currentPathInfo.textContent = currentPath ? `Current: /${currentPath}` : 'Current: Root';
             
             // Add path segments
             if (currentPath) {
@@ -399,27 +484,36 @@
         }
         
         function navigateToPath(path) {
+            if (isLoadingFiles) return; // Prevent multiple simultaneous navigation requests
+            
             currentPath = path;
             updateBreadcrumb();
             refreshFiles();
+            
+            // Clear selection when navigating
+            selectedFile = null;
+            document.querySelectorAll('.file-item').forEach(item => item.classList.remove('selected'));
+            
             addOutput(`📁 Navigated to: ${path || 'Root'}`, 'info');
         }
         
         function navigateUp() {
-            if (!currentPath) return;
+            if (!currentPath || isLoadingFiles) return;
             const parentPath = currentPath.split('/').slice(0, -1).join('/');
             navigateToPath(parentPath);
         }
         
         function navigateHome() {
+            if (isLoadingFiles) return;
             navigateToPath('');
         }
         
         function navigateInto(folderName) {
+            if (isLoadingFiles) return;
             const newPath = currentPath ? `${currentPath}/${folderName}` : folderName;
             navigateToPath(newPath);
         }
-        // --- NEW: NAVIGATION FUNCTIONS END ---
+        // --- ENHANCED NAVIGATION FUNCTIONS END ---
 
         // --- CORE UI AND APP LOGIC START ---
         function initializeUI() {
@@ -440,35 +534,56 @@
             }
         }
 
-        async function refreshFiles() { 
-            if (!fileManagerEnabled) return; 
-            try { 
-                const response = await fetch(`/api/files?path=${encodeURIComponent(currentPath)}`); 
-                const result = await response.json(); 
-                if (result.success) { 
-                    files = result.data; 
-                    renderFiles(); 
-                } else { 
-                    addOutput('❌ Failed to load files: ' + result.message, 'stderr'); 
-                } 
-            } catch (error) { 
-                addOutput('❌ Error loading files: ' + error.message, 'stderr'); 
-            } 
+        async function refreshFiles() {
+            if (!fileManagerEnabled || isLoadingFiles) return;
+            
+            isLoadingFiles = true;
+            const container = document.getElementById('filesContainer');
+            
+            // Show loading state
+            container.innerHTML = '<div class="loading-files"><div class="loading-spinner"></div>Loading files...</div>';
+            
+            try {
+                const response = await fetch(`/api/files?path=${encodeURIComponent(currentPath)}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    files = result.data;
+                    renderFiles();
+                } else {
+                    addOutput('❌ Failed to load files: ' + result.message, 'stderr');
+                    container.innerHTML = `<div class="empty-folder"><div class="empty-icon">❌</div>Error loading files:<br>${result.message}</div>`;
+                }
+            } catch (error) {
+                addOutput('❌ Error loading files: ' + error.message, 'stderr');
+                container.innerHTML = `<div class="empty-folder"><div class="empty-icon">❌</div>Network error:<br>${error.message}</div>`;
+            } finally {
+                isLoadingFiles = false;
+            }
         }
         
-        function renderFiles() { 
-            const container = document.getElementById('filesContainer'); 
-            if (!container) return; 
-            if (files.length === 0) { 
-                container.innerHTML = '<div style="padding: 20px; text-align: center; color: #7d8590;">No files found</div>'; 
-                return; 
-            } 
+        function renderFiles() {
+            const container = document.getElementById('filesContainer');
+            if (!container) return;
+            
+            if (files.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-folder">
+                        <div class="empty-icon">📁</div>
+                        This folder is empty<br>
+                        <small>Create files or folders using the buttons below</small>
+                    </div>
+                `;
+                return;
+            }
+            
             container.innerHTML = files.map(file => {
                 const fullPath = currentPath ? `${currentPath}/${file.name}` : file.name;
-                const clickHandler = file.isDir ? `onclick="navigateInto('${file.name}')"` : `onclick="selectFile('${fullPath}', ${file.isDir})"`;
-                const contextMenuHandler = file.isDir ? '' : `oncontextmenu="showContextMenu(event, '${fullPath}', ${file.isDir})"`;
+                const singleClickHandler = file.isDir ? `onclick="selectFile('${fullPath}', ${file.isDir})"` : `onclick="selectFile('${fullPath}', ${file.isDir})"`;
+                const doubleClickHandler = file.isDir ? `ondblclick="event.stopPropagation(); navigateInto('${file.name}')"` : `ondblclick="event.stopPropagation(); editFile()"`;
+                const contextMenuHandler = `oncontextmenu="showContextMenu(event, '${fullPath}', ${file.isDir})"`;
                 
-                return `<div class="file-item ${file.isDir ? 'folder' : ''}" data-path="${fullPath}" data-is-dir="${file.isDir}" ${clickHandler} ${contextMenuHandler}>
+                return `<div class="file-item ${file.isDir ? 'folder' : ''}" data-path="${fullPath}" data-is-dir="${file.isDir}" ${singleClickHandler} ${doubleClickHandler} ${contextMenuHandler}>
                     <span class="file-icon">${file.isDir ? '📁' : getFileIcon(file.name)}</span>
                     <span class="file-name" title="${file.name}">${file.name}</span>
                     <div class="file-actions">
@@ -476,450 +591,563 @@
                         <button class="action-btn" onclick="event.stopPropagation(); confirmDelete('${fullPath}')" title="Delete">🗑️</button>
                     </div>
                 </div>`;
-            }).join(''); 
+            }).join('');
         }
         
-        function getFileIcon(filename) { const ext = filename.split('.').pop().toLowerCase(); const iconMap = { 'py': '🐍', 'js': '🟨', 'html': '🌐', 'css': '🎨', 'json': '📋', 'md': '📝', 'txt': '📄', 'png': '🖼️', 'jpg': '🖼️', 'jpeg': '🖼️', 'gif': '🖼️', 'pdf': '📕' }; return iconMap[ext] || '📄'; }
-        
-        function selectFile(path, isDir) { 
-            if (isDir) return; // Folders are handled by navigation
-            document.querySelectorAll('.file-item').forEach(item => item.classList.remove('selected')); 
-            const item = document.querySelector(`[data-path="${path}"]`); 
-            if (item) { 
-                item.classList.add('selected'); 
-                selectedFile = { path, isDir }; 
-            } 
+        function getFileIcon(filename) { 
+            const ext = filename.split('.').pop().toLowerCase(); 
+            const iconMap = { 
+                'py': '🐍', 
+                'js': '🟨', 
+                'html': '🌐', 
+                'css': '🎨', 
+                'json': '📋', 
+                'md': '📝', 
+                'txt': '📄', 
+                'png': '🖼️', 
+                'jpg': '🖼️', 
+                'jpeg': '🖼️', 
+                'gif': '🖼️', 
+                'pdf': '📕',
+                'zip': '📦',
+                'rar': '📦',
+                '7z': '📦'
+            }; 
+            return iconMap[ext] || '📄'; 
         }
         
-        function showContextMenu(event, path, isDir) { 
-            event.preventDefault(); 
-            event.stopPropagation(); 
-            selectFile(path, isDir); 
-            const menu = document.getElementById('contextMenu'); 
-            const editItem = document.getElementById('contextMenuEdit'); 
-            const setExecItem = document.getElementById('contextMenuSetExec'); 
-            const separator = document.getElementById('contextMenuSeparator'); 
-            const isEditableFile = !isDir && (path.toLowerCase().endsWith('.py') || path.toLowerCase().endsWith('.txt') || path.toLowerCase().endsWith('.js') || path.toLowerCase().endsWith('.html') || path.toLowerCase().endsWith('.css') || path.toLowerCase().endsWith('.json') || path.toLowerCase().endsWith('.md')); 
-            if (isEditableFile) { 
-                editItem.style.display = 'block'; 
-            } else { 
-                editItem.style.display = 'none'; 
-            } 
-            if (!isDir && path.toLowerCase().endsWith('.py')) { 
-                setExecItem.style.display = 'block'; 
-                separator.style.display = 'block'; 
-            } else { 
-                setExecItem.style.display = 'none'; 
-                separator.style.display = 'none'; 
-            } 
-            menu.style.display = 'block'; 
-            menu.style.left = event.pageX + 'px'; 
-            menu.style.top = event.pageY + 'px'; 
+        function selectFile(path, isDir) {
+            // Clear previous selection
+            document.querySelectorAll('.file-item').forEach(item => item.classList.remove('selected'));
+            
+            // Select current item
+            const item = document.querySelector(`[data-path="${path}"]`);
+            if (item) {
+                item.classList.add('selected');
+                selectedFile = { path, isDir };
+                
+                // Show selection feedback
+                if (isDir) {
+                    addOutput(`📁 Selected folder: ${path} (double-click to enter)`, 'info');
+                } else {
+                    addOutput(`📄 Selected file: ${path}`, 'info');
+                }
+            }
+        }
+        
+        function showContextMenu(event, path, isDir) {
+            event.preventDefault();
+            event.stopPropagation();
+            selectFile(path, isDir);
+            
+            const menu = document.getElementById('contextMenu');
+            const editItem = document.getElementById('contextMenuEdit');
+            const setExecItem = document.getElementById('contextMenuSetExec');
+            const separator = document.getElementById('contextMenuSeparator');
+            
+            const isEditableFile = !isDir && (
+                path.toLowerCase().endsWith('.py') || 
+                path.toLowerCase().endsWith('.txt') || 
+                path.toLowerCase().endsWith('.js') || 
+                path.toLowerCase().endsWith('.html') || 
+                path.toLowerCase().endsWith('.css') || 
+                path.toLowerCase().endsWith('.json') || 
+                path.toLowerCase().endsWith('.md')
+            );
+            
+            if (isEditableFile) {
+                editItem.style.display = 'block';
+            } else {
+                editItem.style.display = 'none';
+            }
+            
+            if (!isDir && path.toLowerCase().endsWith('.py')) {
+                setExecItem.style.display = 'block';
+                separator.style.display = 'block';
+            } else {
+                setExecItem.style.display = 'none';
+                separator.style.display = 'none';
+            }
+            
+            menu.style.display = 'block';
+            menu.style.left = event.pageX + 'px';
+            menu.style.top = event.pageY + 'px';
         }
         
         document.addEventListener('click', () => document.getElementById('contextMenu').style.display = 'none');
         
-        async function editFile() { 
-            if (!selectedFile || selectedFile.isDir) return; 
-            try { 
-                const response = await fetch(`/api/files/content?path=${encodeURIComponent(selectedFile.path)}`); 
-                const result = await response.json(); 
-                if (result.success) { 
-                    currentEditingFile = selectedFile.path; 
-                    originalContent = result.data.content; 
-                    document.getElementById('editorTitle').textContent = `📝 Editing: ${selectedFile.path}`; 
-                    document.getElementById('editorModal').style.display = 'block'; 
-                    const ta = document.getElementById('editorTextarea'); 
-                    ta.value = result.data.content; 
-                    const isPy = currentEditingFile.toLowerCase().endsWith('.py'); 
-                    if (!cm) { 
-                        cm = CodeMirror.fromTextArea(ta, { 
-                            mode: isPy ? 'python' : null, 
-                            theme: 'material-darker', 
-                            lineNumbers: true, 
-                            indentUnit: 4, 
-                            tabSize: 4, 
-                            indentWithTabs: false, 
-                            smartIndent: true, 
-                            matchBrackets: true, 
-                            autoCloseBrackets: true 
-                        }); 
-                        cm.addKeyMap({'Ctrl-S': () => saveFile(), 'Cmd-S':  () => saveFile(), 'Esc': () => closeEditor(), 'Ctrl-Space': () => maybeShowHints(cm), 'Tab': (cm) => { const widget = cm.state.completionActive; if (widget) { cm.state.completionActive.pick(); } else { cm.execCommand('defaultTab');}}}); 
-                        cm.on('inputRead', (instance, changeObj) => { 
-                            if (!currentEditingFile?.toLowerCase().endsWith('.py')) return; 
-                            if (changeObj.origin === "+delete" || changeObj.origin === "complete") return; 
-                            const typed = changeObj.text?.join('') ?? ''; 
-                            if (/\w/.test(typed) || typed === '.') { 
-                                maybeShowHints(cm); 
-                            } 
-                        }); 
-                        cm.on('beforeChange', (instance, changeObj) => { 
-                            if (!currentEditingFile?.toLowerCase().endsWith('.py')) return; 
-                            if (changeObj.origin === '+input') { 
-                                const text = changeObj.text.map(line => line.replace(/\t/g, ' '.repeat(4))); 
-                                if (text.join('\n') !== changeObj.text.join('\n')) { 
+        async function editFile() {
+            if (!selectedFile || selectedFile.isDir) return;
+            
+            try {
+                const response = await fetch(`/api/files/content?path=${encodeURIComponent(selectedFile.path)}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentEditingFile = selectedFile.path;
+                    originalContent = result.data.content;
+                    document.getElementById('editorTitle').textContent = `📝 Editing: ${selectedFile.path}`;
+                    document.getElementById('editorModal').style.display = 'block';
+                    
+                    const ta = document.getElementById('editorTextarea');
+                    ta.value = result.data.content;
+                    
+                    const isPy = currentEditingFile.toLowerCase().endsWith('.py');
+                    
+                    if (!cm) {
+                        cm = CodeMirror.fromTextArea(ta, {
+                            mode: isPy ? 'python' : null,
+                            theme: 'material-darker',
+                            lineNumbers: true,
+                            indentUnit: 4,
+                            tabSize: 4,
+                            indentWithTabs: false,
+                            smartIndent: true,
+                            matchBrackets: true,
+                            autoCloseBrackets: true
+                        });
+                        
+                        cm.addKeyMap({
+                            'Ctrl-S': () => saveFile(),
+                            'Cmd-S': () => saveFile(),
+                            'Esc': () => closeEditor(),
+                            'Ctrl-Space': () => maybeShowHints(cm),
+                            'Tab': (cm) => {
+                                const widget = cm.state.completionActive;
+                                if (widget) {
+                                    cm.state.completionActive.pick();
+                                } else {
+                                    cm.execCommand('defaultTab');
+                                }
+                            }
+                        });
+                        
+                        cm.on('inputRead', (instance, changeObj) => {
+                            if (!currentEditingFile?.toLowerCase().endsWith('.py')) return;
+                            if (changeObj.origin === "+delete" || changeObj.origin === "complete") return;
+                            const typed = changeObj.text?.join('') ?? '';
+                            if (/\w/.test(typed) || typed === '.') {
+                                maybeShowHints(cm);
+                            }
+                        });
+                        
+                        cm.on('beforeChange', (instance, changeObj) => {
+                            if (!currentEditingFile?.toLowerCase().endsWith('.py')) return;
+                            if (changeObj.origin === '+input') {
+                                const text = changeObj.text.map(line => line.replace(/\t/g, ' '.repeat(4)));
+                                if (text.join('\n') !== changeObj.text.join('\n')) {
                                     changeObj.update(changeObj.from, changeObj.to, text, changeObj.origin);
                                 }
                             }
-                        }); 
-                    } else { 
-                        cm.setValue(result.data.content); 
-                        cm.setOption('mode', isPy ? 'python' : null); 
-                        cm.setOption('indentWithTabs', isPy ? false : cm.getOption('indentWithTabs')); 
-                    } 
-                    setTimeout(() => cm.refresh() || cm.focus(), 50); 
-                } else { 
-                    addOutput(`❌ Failed to load file: ${result.message}`, 'stderr'); 
-                } 
-            } catch (error) { 
-                addOutput(`❌ Error loading file: ${error.message}`, 'stderr'); 
-            } 
+                        });
+                    } else {
+                        cm.setValue(result.data.content);
+                        cm.setOption('mode', isPy ? 'python' : null);
+                        cm.setOption('indentWithTabs', isPy ? false : cm.getOption('indentWithTabs'));
+                    }
+                    
+                    setTimeout(() => cm.refresh() || cm.focus(), 50);
+                } else {
+                    addOutput(`❌ Failed to load file: ${result.message}`, 'stderr');
+                }
+            } catch (error) {
+                addOutput(`❌ Error loading file: ${error.message}`, 'stderr');
+            }
         }
         
-        async function saveFile() { 
-            if (!currentEditingFile) return; 
-            let content = (typeof cm !== 'undefined' && cm) ? cm.getValue() : document.getElementById('editorTextarea').value; 
-            if (currentEditingFile && currentEditingFile.toLowerCase().endsWith('.py')) { 
-                content = content.replace(/\t/g, ' '.repeat(4)); 
-            } 
-            const statusEl = document.getElementById('editorStatus'); 
-            try { 
-                statusEl.textContent = 'Saving...'; 
-                const response = await fetch('/api/files/content', { 
-                    method: 'PUT', 
-                    headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify({ path: currentEditingFile, content: content }) 
-                }); 
-                const result = await response.json(); 
-                if (result.success) { 
-                    originalContent = content; 
-                    statusEl.textContent = 'File saved successfully!'; 
-                    addOutput(`✅ Saved: ${currentEditingFile}`, 'success'); 
-                    setTimeout(() => { 
-                        statusEl.textContent = 'Press Ctrl+S to save • Press Escape to close'; 
-                    }, 2000); 
-                } else { 
-                    statusEl.textContent = `Save failed: ${result.message}`; 
-                    addOutput(`❌ Save failed: ${result.message}`, 'stderr'); 
-                } 
-            } catch (error) { 
-                statusEl.textContent = `Save error: ${error.message}`; 
-                addOutput(`❌ Save error: ${error.message}`, 'stderr'); 
-            } 
+        async function saveFile() {
+            if (!currentEditingFile) return;
+            
+            let content = (typeof cm !== 'undefined' && cm) ? cm.getValue() : document.getElementById('editorTextarea').value;
+            
+            if (currentEditingFile && currentEditingFile.toLowerCase().endsWith('.py')) {
+                content = content.replace(/\t/g, ' '.repeat(4));
+            }
+            
+            const statusEl = document.getElementById('editorStatus');
+            
+            try {
+                statusEl.textContent = 'Saving...';
+                const response = await fetch('/api/files/content', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: currentEditingFile, content: content })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    originalContent = content;
+                    statusEl.textContent = 'File saved successfully!';
+                    addOutput(`✅ Saved: ${currentEditingFile}`, 'success');
+                    setTimeout(() => {
+                        statusEl.textContent = 'Press Ctrl+S to save • Press Escape to close';
+                    }, 2000);
+                } else {
+                    statusEl.textContent = `Save failed: ${result.message}`;
+                    addOutput(`❌ Save failed: ${result.message}`, 'stderr');
+                }
+            } catch (error) {
+                statusEl.textContent = `Save error: ${error.message}`;
+                addOutput(`❌ Save error: ${error.message}`, 'stderr');
+            }
         }
         
-        function closeEditor() { 
-            const currentContent = (typeof cm !== 'undefined' && cm) ? cm.getValue() : document.getElementById('editorTextarea').value; 
-            if (currentContent !== originalContent) { 
-                if (!confirm('You have unsaved changes. Are you sure you want to close?')) { 
-                    return; 
-                } 
-            } 
-            document.getElementById('editorModal').style.display = 'none'; 
-            currentEditingFile = null; 
-            originalContent = ''; 
+        function closeEditor() {
+            const currentContent = (typeof cm !== 'undefined' && cm) ? cm.getValue() : document.getElementById('editorTextarea').value;
+            
+            if (currentContent !== originalContent) {
+                if (!confirm('You have unsaved changes. Are you sure you want to close?')) {
+                    return;
+                }
+            }
+            
+            document.getElementById('editorModal').style.display = 'none';
+            currentEditingFile = null;
+            originalContent = '';
         }
         
-        function downloadFileByPath(path) { 
-            const link = document.createElement('a'); 
-            link.href = `/api/files/download?path=${encodeURIComponent(path)}`; 
-            link.download = path.split('/').pop(); 
-            link.click(); 
-            link.remove(); 
+        function downloadFileByPath(path) {
+            const link = document.createElement('a');
+            link.href = `/api/files/download?path=${encodeURIComponent(path)}`;
+            link.download = path.split('/').pop();
+            link.click();
+            link.remove();
         }
         
-        async function downloadFile() { 
-            if (!selectedFile || selectedFile.isDir) return; 
-            downloadFileByPath(selectedFile.path); 
+        async function downloadFile() {
+            if (!selectedFile || selectedFile.isDir) return;
+            downloadFileByPath(selectedFile.path);
         }
         
-        function confirmDelete(path) { 
-            if (confirm(`Are you sure you want to delete "${path}"?`)) { 
-                deleteFileByPath(path); 
-            } 
+        function confirmDelete(path) {
+            if (confirm(`Are you sure you want to delete "${path}"?`)) {
+                deleteFileByPath(path);
+            }
         }
         
-        async function deleteFileByPath(path) { 
-            try { 
-                const response = await fetch(`/api/files/delete?path=${encodeURIComponent(path)}`, { method: 'DELETE' }); 
-                const result = await response.json(); 
-                if (result.success) { 
-                    addOutput(`✅ Deleted: ${path}`, 'success'); 
-                    refreshFiles(); 
-                } else { 
-                    addOutput(`❌ Delete failed: ${result.message}`, 'stderr'); 
-                } 
-            } catch (error) { 
-                addOutput(`❌ Delete error: ${error.message}`, 'stderr'); 
-            } 
+        async function deleteFileByPath(path) {
+            try {
+                const response = await fetch(`/api/files/delete?path=${encodeURIComponent(path)}`, { method: 'DELETE' });
+                const result = await response.json();
+                
+                if (result.success) {
+                    addOutput(`✅ Deleted: ${path}`, 'success');
+                    
+                    // Clear selection if deleted item was selected
+                    if (selectedFile && selectedFile.path === path) {
+                        selectedFile = null;
+                    }
+                    
+                    refreshFiles();
+                } else {
+                    addOutput(`❌ Delete failed: ${result.message}`, 'stderr');
+                }
+            } catch (error) {
+                addOutput(`❌ Delete error: ${error.message}`, 'stderr');
+            }
         }
         
-        async function deleteFile() { 
-            if (!selectedFile) return; 
-            deleteFileByPath(selectedFile.path); 
+        async function deleteFile() {
+            if (!selectedFile) return;
+            deleteFileByPath(selectedFile.path);
         }
         
-        async function uploadFiles() { 
-            const files = document.getElementById('fileInput').files; 
-            if (files.length === 0) return; 
-            const formData = new FormData(); 
-            for (let file of files) formData.append('files', file); 
+        async function uploadFiles() {
+            const files = document.getElementById('fileInput').files;
+            if (files.length === 0) return;
+            
+            const formData = new FormData();
+            for (let file of files) formData.append('files', file);
             formData.append('path', currentPath); // Upload to current directory
-            try { 
-                const response = await fetch('/api/files/upload', { method: 'POST', body: formData }); 
-                const result = await response.json(); 
-                if (result.success) { 
-                    addOutput(`✅ ${result.message}`, 'success'); 
-                    refreshFiles(); 
-                } else { 
-                    addOutput(`❌ Upload failed: ${result.message}`, 'stderr'); 
-                } 
-            } catch (error) { 
-                addOutput(`❌ Upload error: ${error.message}`, 'stderr'); 
-            } 
+            
+            try {
+                const response = await fetch('/api/files/upload', { method: 'POST', body: formData });
+                const result = await response.json();
+                
+                if (result.success) {
+                    addOutput(`✅ ${result.message}`, 'success');
+                    refreshFiles();
+                } else {
+                    addOutput(`❌ Upload failed: ${result.message}`, 'stderr');
+                }
+            } catch (error) {
+                addOutput(`❌ Upload error: ${error.message}`, 'stderr');
+            }
         }
         
-        if (fileManagerEnabled) { 
-            const uploadArea = document.getElementById('uploadArea'); 
-            uploadArea.addEventListener('dragover', e => { 
-                e.preventDefault(); 
-                uploadArea.classList.add('drag-over'); 
-            }); 
-            uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('drag-over')); 
-            uploadArea.addEventListener('drop', async e => { 
-                e.preventDefault(); 
-                uploadArea.classList.remove('drag-over'); 
-                const files = e.dataTransfer.files; 
-                if (files.length === 0) return; 
-                const formData = new FormData(); 
-                for (let file of files) formData.append('files', file); 
+        if (fileManagerEnabled) {
+            const uploadArea = document.getElementById('uploadArea');
+            uploadArea.addEventListener('dragover', e => {
+                e.preventDefault();
+                uploadArea.classList.add('drag-over');
+            });
+            uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('drag-over'));
+            uploadArea.addEventListener('drop', async e => {
+                e.preventDefault();
+                uploadArea.classList.remove('drag-over');
+                
+                const files = e.dataTransfer.files;
+                if (files.length === 0) return;
+                
+                const formData = new FormData();
+                for (let file of files) formData.append('files', file);
                 formData.append('path', currentPath); // Upload to current directory
-                try { 
-                    const response = await fetch('/api/files/upload', { method: 'POST', body: formData }); 
-                    const result = await response.json(); 
-                    if (result.success) { 
-                        addOutput(`✅ ${result.message}`, 'success'); 
-                        refreshFiles(); 
-                    } else { 
-                        addOutput(`❌ Upload failed: ${result.message}`, 'stderr'); 
-                    } 
-                } catch (error) { 
-                    addOutput(`❌ Upload error: ${error.message}`, 'stderr'); 
-                } 
-            }); 
+                
+                try {
+                    const response = await fetch('/api/files/upload', { method: 'POST', body: formData });
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        addOutput(`✅ ${result.message}`, 'success');
+                        refreshFiles();
+                    } else {
+                        addOutput(`❌ Upload failed: ${result.message}`, 'stderr');
+                    }
+                } catch (error) {
+                    addOutput(`❌ Upload error: ${error.message}`, 'stderr');
+                }
+            });
         }
         
-        function showCreateModal(type) { 
-            createType = type; 
-            const modal = document.getElementById('createModal'); 
-            document.getElementById('modalTitle').textContent = `Create ${type}`; 
-            const input = document.getElementById('modalInput'); 
-            input.placeholder = `Enter ${type} name...`; 
-            input.value = ''; 
-            modal.style.display = 'block'; 
-            input.focus(); 
+        function showCreateModal(type) {
+            createType = type;
+            const modal = document.getElementById('createModal');
+            document.getElementById('modalTitle').textContent = `Create ${type}`;
+            const input = document.getElementById('modalInput');
+            input.placeholder = `Enter ${type} name...`;
+            input.value = '';
+            modal.style.display = 'block';
+            input.focus();
         }
         
-        function closeCreateModal() { 
-            document.getElementById('createModal').style.display = 'none'; 
+        function closeCreateModal() {
+            document.getElementById('createModal').style.display = 'none';
         }
         
-        async function createItem() { 
-            const name = document.getElementById('modalInput').value.trim(); 
-            if (!name) return; 
+        async function createItem() {
+            const name = document.getElementById('modalInput').value.trim();
+            if (!name) return;
+            
             const itemPath = currentPath ? `${currentPath}/${name}` : name;
-            try { 
-                const response = await fetch('/api/files/create', { 
-                    method: 'POST', 
-                    headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify({ path: itemPath, isDir: createType === 'folder' }) 
-                }); 
-                const result = await response.json(); 
-                if (result.success) { 
-                    addOutput(`✅ Created ${createType}: ${itemPath}`, 'success'); 
-                    refreshFiles(); 
-                    closeCreateModal(); 
-                } else { 
-                    addOutput(`❌ Create failed: ${result.message}`, 'stderr'); 
-                } 
-            } catch (error) { 
-                addOutput(`❌ Create error: ${error.message}`, 'stderr'); 
-            } 
+            
+            try {
+                const response = await fetch('/api/files/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: itemPath, isDir: createType === 'folder' })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    addOutput(`✅ Created ${createType}: ${itemPath}`, 'success');
+                    closeCreateModal();
+                    
+                    // Refresh files to show the new item
+                    refreshFiles();
+                    
+                    // Provide immediate feedback for navigation
+                    if (createType === 'folder') {
+                        addOutput(`💡 Double-click the new folder "${name}" to enter it`, 'info');
+                    }
+                } else {
+                    addOutput(`❌ Create failed: ${result.message}`, 'stderr');
+                }
+            } catch (error) {
+                addOutput(`❌ Create error: ${error.message}`, 'stderr');
+            }
         }
         
-        if (fileManagerEnabled) { 
-            document.getElementById('modalInput').addEventListener('keypress', e => { 
-                if (e.key === 'Enter') createItem(); 
-            }); 
-            const resizeHandle = document.getElementById('resizeHandle'); 
-            const sidebar = document.getElementById('sidebar'); 
-            resizeHandle.addEventListener('mousedown', () => { 
-                isResizing = true; 
-                document.addEventListener('mousemove', handleResize); 
-                document.addEventListener('mouseup', stopResize); 
-            }); 
-            function handleResize(e) { 
-                if (isResizing) sidebar.style.width = Math.max(200, Math.min(600, e.clientX)) + 'px'; 
-            } 
-            function stopResize() { 
-                isResizing = false; 
-                document.removeEventListener('mousemove', handleResize); 
-                document.removeEventListener('mouseup', stopResize); 
-            } 
+        if (fileManagerEnabled) {
+            document.getElementById('modalInput').addEventListener('keypress', e => {
+                if (e.key === 'Enter') createItem();
+            });
+            
+            const resizeHandle = document.getElementById('resizeHandle');
+            const sidebar = document.getElementById('sidebar');
+            resizeHandle.addEventListener('mousedown', () => {
+                isResizing = true;
+                document.addEventListener('mousemove', handleResize);
+                document.addEventListener('mouseup', stopResize);
+            });
+            
+            function handleResize(e) {
+                if (isResizing) sidebar.style.width = Math.max(200, Math.min(600, e.clientX)) + 'px';
+            }
+            
+            function stopResize() {
+                isResizing = false;
+                document.removeEventListener('mousemove', handleResize);
+                document.removeEventListener('mouseup', stopResize);
+            }
         }
         
-        function setExecutable() { 
-            if (!selectedFile || selectedFile.isDir) return; 
-            executableFile = selectedFile.path; 
-            updateExecutingFileUI(); 
-            addOutput(`✅ Set active script to: ${executableFile}`, 'success'); 
+        function setExecutable() {
+            if (!selectedFile || selectedFile.isDir) return;
+            executableFile = selectedFile.path;
+            updateExecutingFileUI();
+            addOutput(`✅ Set active script to: ${executableFile}`, 'success');
         }
         
-        function updateExecutingFileUI() { 
-            const scriptName = executableFile || 'None'; 
-            document.getElementById('activeScript').textContent = scriptName; 
-            document.getElementById('runBtn').disabled = !executableFile || isRunning; 
-            const statusEl = document.getElementById('status'); 
-            if (!executableFile && !isRunning) { 
-                statusEl.textContent = 'Select Script'; 
-            } else if (!isRunning) { 
-                statusEl.textContent = 'Ready'; 
-            } 
+        function updateExecutingFileUI() {
+            const scriptName = executableFile || 'None';
+            document.getElementById('activeScript').textContent = scriptName;
+            document.getElementById('runBtn').disabled = !executableFile || isRunning;
+            
+            const statusEl = document.getElementById('status');
+            if (!executableFile && !isRunning) {
+                statusEl.textContent = 'Select Script';
+            } else if (!isRunning) {
+                statusEl.textContent = 'Ready';
+            }
         }
         
-        function connectWebSocket() { 
-            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'; 
-            ws = new WebSocket(`${protocol}//${location.host}/ws`); 
-            ws.onopen = () => addOutput(`🔗 WebSocket connected!`, 'success'); 
-            ws.onmessage = event => handleMessage(JSON.parse(event.data)); 
-            ws.onclose = () => { 
-                addOutput('❌ WebSocket closed. Reconnecting...', 'stderr'); 
-                setTimeout(connectWebSocket, 3000); 
-            }; 
+        function connectWebSocket() {
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${location.host}/ws`);
+            ws.onopen = () => addOutput(`🔗 WebSocket connected!`, 'success');
+            ws.onmessage = event => handleMessage(JSON.parse(event.data));
+            ws.onclose = () => {
+                addOutput('❌ WebSocket closed. Reconnecting...', 'stderr');
+                setTimeout(connectWebSocket, 3000);
+            };
         }
         
-        function executeScript() { 
-            if (isRunning || !ws || ws.readyState !== WebSocket.OPEN) return; 
-            if (!executableFile) { 
-                addOutput('❌ No script selected. Right-click a Python file to set it.', 'stderr'); 
-                return; 
-            } 
-            isRunning = true; 
-            isWaitingForInput = false; 
-            lastLineElement = null; 
-            updateExecutingFileUI(); 
-            document.getElementById('status').textContent = 'Running'; 
-            document.getElementById('status').className = 'status running'; 
-            hideInputSection(); 
-            addOutput(`$ python ${executableFile}`, 'command-line'); 
-            ws.send(JSON.stringify({ type: 'execute', file: executableFile })); 
+        function executeScript() {
+            if (isRunning || !ws || ws.readyState !== WebSocket.OPEN) return;
+            
+            if (!executableFile) {
+                addOutput('❌ No script selected. Right-click a Python file to set it.', 'stderr');
+                return;
+            }
+            
+            isRunning = true;
+            isWaitingForInput = false;
+            lastLineElement = null;
+            updateExecutingFileUI();
+            document.getElementById('status').textContent = 'Running';
+            document.getElementById('status').className = 'status running';
+            hideInputSection();
+            
+            addOutput(`$ python ${executableFile}`, 'command-line');
+            ws.send(JSON.stringify({ type: 'execute', file: executableFile }));
         }
         
-        function handleMessage(data) { 
-            lastOutputTime = Date.now(); 
-            switch(data.type) { 
-                case 'stdout': 
-                    addOutput(data.content, 'stdout'); 
-                    let promptText = lastLineElement ? lastLineElement.textContent : ""; 
-                    if (isRunning && !isWaitingForInput && promptText) { 
-                        const trimmed = promptText.trim().toLowerCase(); 
-                        if (promptText.trim().endsWith(':') || promptText.trim().endsWith('?') || trimmed.includes('enter') || trimmed.includes('input')) { 
-                            setTimeout(() => { 
-                                if (isRunning && !isWaitingForInput) showInputSection('Pattern detected'); 
-                            }, 50); 
-                        } 
-                    } 
-                    break; 
-                case 'stderr': 
-                    addOutput(data.content, 'stderr'); 
-                    break; 
-                case 'completed': 
-                    addOutput('──────────────────────────────────────────', 'info'); 
-                    addOutput(`✅ Script finished. ${data.content}`, 'success'); 
-                    resetState(); 
-                    break; 
-                case 'error': 
-                    addOutput(`❌ Error: ${data.content}`, 'stderr'); 
-                    resetState(); 
-                    break; 
-            } 
+        function handleMessage(data) {
+            lastOutputTime = Date.now();
+            
+            switch(data.type) {
+                case 'stdout':
+                    addOutput(data.content, 'stdout');
+                    let promptText = lastLineElement ? lastLineElement.textContent : "";
+                    if (isRunning && !isWaitingForInput && promptText) {
+                        const trimmed = promptText.trim().toLowerCase();
+                        if (promptText.trim().endsWith(':') || promptText.trim().endsWith('?') || trimmed.includes('enter') || trimmed.includes('input')) {
+                            setTimeout(() => {
+                                if (isRunning && !isWaitingForInput) showInputSection('Pattern detected');
+                            }, 50);
+                        }
+                    }
+                    break;
+                case 'stderr':
+                    addOutput(data.content, 'stderr');
+                    break;
+                case 'completed':
+                    addOutput('──────────────────────────────────────────', 'info');
+                    addOutput(`✅ Script finished. ${data.content}`, 'success');
+                    resetState();
+                    break;
+                case 'error':
+                    addOutput(`❌ Error: ${data.content}`, 'stderr');
+                    resetState();
+                    break;
+            }
         }
         
-        function showInputSection(reason = 'Input required') { 
-            if (!isRunning || isWaitingForInput) return; 
-            isWaitingForInput = true; 
-            const inputSection = document.getElementById('inputSection'); 
-            inputSection.classList.add('show'); 
-            document.getElementById('status').textContent = 'Waiting for Input'; 
-            document.getElementById('status').className = 'status waiting-input'; 
-            setTimeout(() => document.getElementById('userInput')?.focus(), 100); 
-            addOutput(`⏳ ${reason}`, 'input-waiting'); 
-            document.getElementById('output').scrollTop = document.getElementById('output').scrollHeight; 
+        function showInputSection(reason = 'Input required') {
+            if (!isRunning || isWaitingForInput) return;
+            
+            isWaitingForInput = true;
+            const inputSection = document.getElementById('inputSection');
+            inputSection.classList.add('show');
+            document.getElementById('status').textContent = 'Waiting for Input';
+            document.getElementById('status').className = 'status waiting-input';
+            
+            setTimeout(() => document.getElementById('userInput')?.focus(), 100);
+            addOutput(`⏳ ${reason}`, 'input-waiting');
+            document.getElementById('output').scrollTop = document.getElementById('output').scrollHeight;
         }
         
-        function hideInputSection() { 
-            document.getElementById('inputSection').classList.remove('show'); 
-            if (isRunning) { 
-                document.getElementById('status').textContent = 'Running'; 
-                document.getElementById('status').className = 'status running'; 
-            } 
+        function hideInputSection() {
+            document.getElementById('inputSection').classList.remove('show');
+            if (isRunning) {
+                document.getElementById('status').textContent = 'Running';
+                document.getElementById('status').className = 'status running';
+            }
         }
         
-        function sendInput() { 
-            if (!isWaitingForInput || !ws || ws.readyState !== WebSocket.OPEN) return; 
-            const inputField = document.getElementById('userInput'); 
-            addOutput(`> ${inputField.value}`, 'input-prompt'); 
-            lastLineElement = null; 
-            ws.send(JSON.stringify({ type: 'input', input: inputField.value })); 
-            inputField.value = ''; 
-            hideInputSection(); 
-            isWaitingForInput = false; 
-            lastOutputTime = Date.now(); 
+        function sendInput() {
+            if (!isWaitingForInput || !ws || ws.readyState !== WebSocket.OPEN) return;
+            
+            const inputField = document.getElementById('userInput');
+            addOutput(`> ${inputField.value}`, 'input-prompt');
+            lastLineElement = null;
+            ws.send(JSON.stringify({ type: 'input', input: inputField.value }));
+            inputField.value = '';
+            hideInputSection();
+            isWaitingForInput = false;
+            lastOutputTime = Date.now();
         }
         
-        function handleInputKeyPress(event) { 
-            if (event.key === 'Enter') sendInput(); 
+        function handleInputKeyPress(event) {
+            if (event.key === 'Enter') sendInput();
         }
         
-        function resetState() { 
-            isRunning = false; 
-            isWaitingForInput = false; 
-            lastLineElement = null; 
-            updateExecutingFileUI(); 
-            hideInputSection(); 
+        function resetState() {
+            isRunning = false;
+            isWaitingForInput = false;
+            lastLineElement = null;
+            updateExecutingFileUI();
+            hideInputSection();
         }
         
-        function addOutput(text, className = 'stdout') { 
-            const output = document.getElementById('output'); 
-            if (text === '') return; 
-            const parts = text.split('\n'); 
-            if (parts[0]) { 
-                if (lastLineElement && !text.startsWith('\n')) { 
-                    lastLineElement.textContent += parts[0]; 
-                } else { 
-                    const lineDiv = document.createElement('div'); 
-                    lineDiv.className = 'output-line ' + className; 
-                    lineDiv.textContent = parts[0]; 
-                    output.appendChild(lineDiv); 
-                    lastLineElement = lineDiv; 
-                } 
-            } 
-            for (let i = 1; i < parts.length; i++) { 
-                lastLineElement = null; 
-                if (i === parts.length - 1 && parts[i] === '') continue; 
-                const lineDiv = document.createElement('div'); 
-                lineDiv.className = 'output-line ' + className; 
-                lineDiv.textContent = parts[i]; 
-                output.appendChild(lineDiv); 
-                lastLineElement = lineDiv; 
-            } 
-            if (text.endsWith('\n')) lastLineElement = null; 
-            output.scrollTop = output.scrollHeight; 
+        function addOutput(text, className = 'stdout') {
+            const output = document.getElementById('output');
+            if (text === '') return;
+            
+            const parts = text.split('\n');
+            
+            if (parts[0]) {
+                if (lastLineElement && !text.startsWith('\n')) {
+                    lastLineElement.textContent += parts[0];
+                } else {
+                    const lineDiv = document.createElement('div');
+                    lineDiv.className = 'output-line ' + className;
+                    lineDiv.textContent = parts[0];
+                    output.appendChild(lineDiv);
+                    lastLineElement = lineDiv;
+                }
+            }
+            
+            for (let i = 1; i < parts.length; i++) {
+                lastLineElement = null;
+                if (i === parts.length - 1 && parts[i] === '') continue;
+                
+                const lineDiv = document.createElement('div');
+                lineDiv.className = 'output-line ' + className;
+                lineDiv.textContent = parts[i];
+                output.appendChild(lineDiv);
+                lastLineElement = lineDiv;
+            }
+            
+            if (text.endsWith('\n')) lastLineElement = null;
+            output.scrollTop = output.scrollHeight;
         }
         
-        function clearOutput() { 
-            document.getElementById('output').innerHTML = `<div class="output-line info">Python Web Terminal - Interactive Execution</div><div class="output-line info">📂 Right-click a Python file and 'Set as Executable' to begin</div><div class="output-line">──────────────────────────────────────────</div>`; 
-            lastLineElement = null; 
+        function clearOutput() {
+            document.getElementById('output').innerHTML = `<div class="output-line info">Python Web Terminal - Interactive Execution</div><div class="output-line info">📂 Right-click a Python file and 'Set as Executable' to begin</div><div class="output-line">──────────────────────────────────────────</div>`;
+            lastLineElement = null;
         }
         
         window.onload = function() {
