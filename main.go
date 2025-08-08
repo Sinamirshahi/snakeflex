@@ -36,7 +36,7 @@ type TerminalServer struct {
 	pythonCmd          string
 	workingDir         string
 	fileManagerEnabled bool
-	shellEnabled       bool // New field to track shell status
+	shellEnabled       bool
 }
 
 type Message struct {
@@ -156,10 +156,29 @@ func verifyPython3(pythonCmd string) bool {
 	return len(version) >= 8 && version[:8] == "Python 3"
 }
 
+// NEW: Enhanced getDirectoryTree with navigation support
 func (ts *TerminalServer) getDirectoryTree(dirPath string) ([]FileInfo, error) {
 	var files []FileInfo
 
-	entries, err := os.ReadDir(dirPath)
+	// Resolve the full directory path
+	fullDirPath := filepath.Join(ts.workingDir, dirPath)
+
+	// Security check: ensure the path is within working directory
+	absFullDirPath, err := filepath.Abs(fullDirPath)
+	if err != nil {
+		return nil, fmt.Errorf("invalid path: %v", err)
+	}
+
+	absWorkingDir, err := filepath.Abs(ts.workingDir)
+	if err != nil {
+		return nil, fmt.Errorf("working directory error: %v", err)
+	}
+
+	if !strings.HasPrefix(absFullDirPath, absWorkingDir) {
+		return nil, fmt.Errorf("access denied: path outside working directory")
+	}
+
+	entries, err := os.ReadDir(absFullDirPath)
 	if err != nil {
 		return nil, err
 	}
@@ -176,12 +195,15 @@ func (ts *TerminalServer) getDirectoryTree(dirPath string) ([]FileInfo, error) {
 			continue
 		}
 
-		fullPath := filepath.Join(dirPath, entry.Name())
-		relPath, _ := filepath.Rel(ts.workingDir, fullPath)
+		// For file paths, we store the relative path from working directory
+		relativePath := filepath.Join(dirPath, entry.Name())
+		if dirPath == "" {
+			relativePath = entry.Name()
+		}
 
 		fileInfo := FileInfo{
 			Name:    entry.Name(),
-			Path:    relPath,
+			Path:    relativePath,
 			IsDir:   entry.IsDir(),
 			Size:    info.Size(),
 			ModTime: info.ModTime(),
@@ -190,6 +212,7 @@ func (ts *TerminalServer) getDirectoryTree(dirPath string) ([]FileInfo, error) {
 		files = append(files, fileInfo)
 	}
 
+	// Sort: directories first, then files, alphabetically within each group
 	sort.Slice(files, func(i, j int) bool {
 		if files[i].IsDir != files[j].IsDir {
 			return files[i].IsDir
@@ -198,6 +221,30 @@ func (ts *TerminalServer) getDirectoryTree(dirPath string) ([]FileInfo, error) {
 	})
 
 	return files, nil
+}
+
+// NEW: Helper function to validate and resolve paths
+func (ts *TerminalServer) validateAndResolvePath(relativePath string) (string, error) {
+	if relativePath == "" {
+		return ts.workingDir, nil
+	}
+
+	fullPath := filepath.Join(ts.workingDir, relativePath)
+	absPath, err := filepath.Abs(fullPath)
+	if err != nil {
+		return "", fmt.Errorf("invalid path: %v", err)
+	}
+
+	absWorkingDir, err := filepath.Abs(ts.workingDir)
+	if err != nil {
+		return "", fmt.Errorf("working directory error: %v", err)
+	}
+
+	if !strings.HasPrefix(absPath, absWorkingDir) {
+		return "", fmt.Errorf("access denied: path outside working directory")
+	}
+
+	return absPath, nil
 }
 
 func (ts *TerminalServer) getHTMLContent(htmlFile string) (string, bool) {
@@ -232,7 +279,6 @@ func main() {
 	verbose := flag.Bool("verbose", false, "Enable verbose logging")
 	htmlFile := flag.String("template", "terminal.html", "HTML template file (will use embedded if not found)")
 	disableFileManager := flag.Bool("disable-file-manager", false, "Disable file management features for security")
-	// NEW: Flag to disable the interactive shell
 	disableShell := flag.Bool("disable-shell", false, "Disable the interactive shell feature")
 	flag.Parse()
 
@@ -267,7 +313,7 @@ func main() {
 		pythonCmd:          pythonCmd,
 		workingDir:         workingDir,
 		fileManagerEnabled: !*disableFileManager,
-		shellEnabled:       !*disableShell, // Set server status based on the flag
+		shellEnabled:       !*disableShell,
 	}
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -275,7 +321,6 @@ func main() {
 	})
 	http.HandleFunc("/ws", server.websocketHandler)
 
-	// Conditionally register the interactive shell handler
 	if server.shellEnabled {
 		http.HandleFunc("/ws-shell", server.shellWebsocketHandler)
 	}
@@ -301,12 +346,11 @@ func main() {
 		fmt.Println("📝 Verbose logging enabled")
 	}
 	if server.fileManagerEnabled {
-		fmt.Println("📂 File management panel enabled!")
+		fmt.Println("📂 File management panel enabled with folder navigation!")
 	} else {
 		fmt.Println("🔒 File management disabled for security")
 	}
 
-	// Print status of the interactive shell
 	if server.shellEnabled {
 		fmt.Println("⌨️ Interactive shell enabled at /ws-shell")
 	} else {
@@ -400,7 +444,6 @@ func (ts *TerminalServer) terminalHandler(w http.ResponseWriter, r *http.Request
 	htmlStr = strings.ReplaceAll(htmlStr, "{{INITIAL_PYTHON_FILE}}", ts.pythonFile)
 	htmlStr = strings.ReplaceAll(htmlStr, "{{WORKING_DIR}}", ts.workingDir)
 	htmlStr = strings.ReplaceAll(htmlStr, "{{FILE_MANAGER_ENABLED}}", fmt.Sprintf("%t", ts.fileManagerEnabled))
-	// NEW: Pass the shell enabled status to the frontend
 	htmlStr = strings.ReplaceAll(htmlStr, "{{SHELL_ENABLED}}", fmt.Sprintf("%t", ts.shellEnabled))
 
 	if isEmbedded {
@@ -411,7 +454,7 @@ func (ts *TerminalServer) terminalHandler(w http.ResponseWriter, r *http.Request
 	fmt.Fprint(w, htmlStr)
 }
 
-// ... rest of the file is unchanged ...
+// UPDATED: Enhanced filesHandler with navigation support
 func (ts *TerminalServer) filesHandler(w http.ResponseWriter, r *http.Request) {
 	if !ts.fileManagerEnabled {
 		http.Error(w, "File management disabled", http.StatusForbidden)
@@ -421,21 +464,21 @@ func (ts *TerminalServer) filesHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
 		dirPath := r.URL.Query().Get("path")
-		if dirPath == "" {
-			dirPath = ts.workingDir
-		} else {
-			dirPath = filepath.Join(ts.workingDir, dirPath)
-		}
-		absDir, err := filepath.Abs(dirPath)
-		if err != nil || !strings.HasPrefix(absDir, ts.workingDir) {
-			json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Invalid path"})
-			return
-		}
+
+		// Validate and get files for the requested directory
 		files, err := ts.getDirectoryTree(dirPath)
 		if err != nil {
+			if ts.verbose {
+				log.Printf("Error getting directory tree for path '%s': %v", dirPath, err)
+			}
 			json.NewEncoder(w).Encode(APIResponse{Success: false, Message: err.Error()})
 			return
 		}
+
+		if ts.verbose {
+			log.Printf("📁 Listing %d items in directory: %s", len(files), dirPath)
+		}
+
 		json.NewEncoder(w).Encode(APIResponse{Success: true, Data: files})
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -459,10 +502,10 @@ func (ts *TerminalServer) fileContentHandler(w http.ResponseWriter, r *http.Requ
 			return
 		}
 
-		fullPath := filepath.Join(ts.workingDir, filePath)
-		absPath, err := filepath.Abs(fullPath)
-		if err != nil || !strings.HasPrefix(absPath, ts.workingDir) {
-			json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Invalid path"})
+		// Use the new validation function
+		absPath, err := ts.validateAndResolvePath(filePath)
+		if err != nil {
+			json.NewEncoder(w).Encode(APIResponse{Success: false, Message: err.Error()})
 			return
 		}
 
@@ -503,10 +546,10 @@ func (ts *TerminalServer) fileContentHandler(w http.ResponseWriter, r *http.Requ
 			return
 		}
 
-		fullPath := filepath.Join(ts.workingDir, req.Path)
-		absPath, err := filepath.Abs(fullPath)
-		if err != nil || !strings.HasPrefix(absPath, ts.workingDir) {
-			json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Invalid path"})
+		// Use the new validation function
+		absPath, err := ts.validateAndResolvePath(req.Path)
+		if err != nil {
+			json.NewEncoder(w).Encode(APIResponse{Success: false, Message: err.Error()})
 			return
 		}
 
@@ -537,12 +580,14 @@ func (ts *TerminalServer) downloadHandler(w http.ResponseWriter, r *http.Request
 		http.Error(w, "Path parameter required", http.StatusBadRequest)
 		return
 	}
-	fullPath := filepath.Join(ts.workingDir, filePath)
-	absPath, err := filepath.Abs(fullPath)
-	if err != nil || !strings.HasPrefix(absPath, ts.workingDir) {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
+
+	// Use the new validation function
+	absPath, err := ts.validateAndResolvePath(filePath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
 	info, err := os.Stat(absPath)
 	if err != nil {
 		http.Error(w, "File not found", http.StatusNotFound)
@@ -573,16 +618,19 @@ func (ts *TerminalServer) uploadHandler(w http.ResponseWriter, r *http.Request) 
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Failed to parse form: " + err.Error()})
 		return
 	}
+
 	uploadPath := r.FormValue("path")
 	if uploadPath == "" {
 		uploadPath = "."
 	}
-	targetDir := filepath.Join(ts.workingDir, uploadPath)
-	absDir, err := filepath.Abs(targetDir)
-	if err != nil || !strings.HasPrefix(absDir, ts.workingDir) {
-		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Invalid path"})
+
+	// Use the new validation function
+	absDir, err := ts.validateAndResolvePath(uploadPath)
+	if err != nil {
+		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: err.Error()})
 		return
 	}
+
 	files := r.MultipartForm.File["files"]
 	if len(files) == 0 {
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "No files uploaded"})
@@ -612,7 +660,17 @@ func (ts *TerminalServer) uploadHandler(w http.ResponseWriter, r *http.Request) 
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Failed to upload any files"})
 		return
 	}
-	json.NewEncoder(w).Encode(APIResponse{Success: true, Message: fmt.Sprintf("Uploaded %d file(s)", len(uploadedFiles)), Data: uploadedFiles})
+
+	displayPath := uploadPath
+	if uploadPath == "." {
+		displayPath = "root directory"
+	}
+
+	json.NewEncoder(w).Encode(APIResponse{
+		Success: true,
+		Message: fmt.Sprintf("Uploaded %d file(s) to %s", len(uploadedFiles), displayPath),
+		Data:    uploadedFiles,
+	})
 }
 
 func (ts *TerminalServer) createHandler(w http.ResponseWriter, r *http.Request) {
@@ -634,20 +692,26 @@ func (ts *TerminalServer) createHandler(w http.ResponseWriter, r *http.Request) 
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Invalid request body"})
 		return
 	}
-	targetPath := filepath.Join(ts.workingDir, req.Path)
-	absPath, err := filepath.Abs(targetPath)
-	if err != nil || !strings.HasPrefix(absPath, ts.workingDir) {
-		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Invalid path"})
+
+	// Use the new validation function
+	absPath, err := ts.validateAndResolvePath(req.Path)
+	if err != nil {
+		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: err.Error()})
 		return
 	}
+
 	if req.IsDir {
 		err = os.MkdirAll(absPath, 0755)
 	} else {
-		file, errCreate := os.Create(absPath)
-		if errCreate == nil {
-			file.Close()
+		// Ensure parent directory exists
+		parentDir := filepath.Dir(absPath)
+		if err = os.MkdirAll(parentDir, 0755); err == nil {
+			file, errCreate := os.Create(absPath)
+			if errCreate == nil {
+				file.Close()
+			}
+			err = errCreate
 		}
-		err = errCreate
 	}
 	if err != nil {
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: err.Error()})
@@ -672,12 +736,14 @@ func (ts *TerminalServer) deleteHandler(w http.ResponseWriter, r *http.Request) 
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Path parameter required"})
 		return
 	}
-	targetPath := filepath.Join(ts.workingDir, filePath)
-	absPath, err := filepath.Abs(targetPath)
-	if err != nil || !strings.HasPrefix(absPath, ts.workingDir) {
-		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Invalid path"})
+
+	// Use the new validation function
+	absPath, err := ts.validateAndResolvePath(filePath)
+	if err != nil {
+		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: err.Error()})
 		return
 	}
+
 	err = os.RemoveAll(absPath)
 	if err != nil {
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: err.Error()})
@@ -741,13 +807,14 @@ func (ts *TerminalServer) executePythonScript(safeConn *SafeWebSocketConn, input
 		return
 	}
 
-	targetPath := filepath.Join(ts.workingDir, filepath.Clean(pythonFile))
-	absPath, err := filepath.Abs(targetPath)
-	if err != nil || !strings.HasPrefix(absPath, ts.workingDir) {
-		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Invalid or forbidden file path: %s", pythonFile)})
+	// Use the new validation function
+	absPath, err := ts.validateAndResolvePath(pythonFile)
+	if err != nil {
+		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Invalid file path: %v", err)})
 		close(inputChan)
 		return
 	}
+
 	if _, err := os.Stat(absPath); os.IsNotExist(err) {
 		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("File not found: %s", pythonFile)})
 		close(inputChan)

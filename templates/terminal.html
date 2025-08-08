@@ -28,10 +28,24 @@
         .sidebar { width: 300px; min-width: 200px; max-width: 600px; background: #161b22; border-right: 1px solid #30363d; display: flex; flex-direction: column; position: relative; }
         .sidebar.hidden { display: none; }
         .sidebar-header { background: #21262d; padding: 12px 15px; border-bottom: 1px solid #30363d; display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: bold; }
+        
+        /* NEW: Navigation Controls */
+        .navigation-bar { background: #1c2128; border-bottom: 1px solid #30363d; padding: 8px 15px; display: flex; align-items: center; gap: 8px; }
+        .nav-btn { background: #30363d; border: 1px solid #484f58; color: #c9d1d9; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; transition: all 0.2s; display: flex; align-items: center; gap: 4px; }
+        .nav-btn:hover { background: #484f58; border-color: #58a6ff; }
+        .nav-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .breadcrumb { flex: 1; display: flex; align-items: center; gap: 4px; font-size: 11px; color: #7d8590; }
+        .breadcrumb-item { cursor: pointer; padding: 2px 6px; border-radius: 3px; transition: all 0.2s; }
+        .breadcrumb-item:hover { background: rgba(177, 186, 196, 0.12); color: #c9d1d9; }
+        .breadcrumb-item.current { color: #58a6ff; font-weight: bold; }
+        .breadcrumb-separator { color: #484f58; margin: 0 2px; }
+        
         .files-container { flex: 1; overflow-y: auto; padding: 10px 0; }
         .file-item { display: flex; align-items: center; gap: 8px; padding: 6px 15px; cursor: pointer; font-size: 13px; position: relative; border-radius: 3px; margin: 1px 8px; }
         .file-item:hover { background: rgba(177, 186, 196, 0.12); }
         .file-item.selected { background: #1f6feb; color: white; }
+        .file-item.folder { font-weight: bold; }
+        .file-item.folder:hover { background: rgba(88, 166, 255, 0.15); }
         .file-icon { width: 16px; text-align: center; flex-shrink: 0; }
         .file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .file-actions { display: none; gap: 4px; }
@@ -147,6 +161,22 @@
                         🔄
                     </button>
                 </div>
+                
+                <!-- NEW: Navigation Bar -->
+                <div class="navigation-bar" id="navigationBar">
+                    <button class="nav-btn" id="upBtn" onclick="navigateUp()" disabled>
+                        <span>↑</span>
+                        Up
+                    </button>
+                    <button class="nav-btn" onclick="navigateHome()">
+                        <span>🏠</span>
+                        Home
+                    </button>
+                    <div class="breadcrumb" id="breadcrumb">
+                        <span class="breadcrumb-item current" onclick="navigateToPath('')">📁 Root</span>
+                    </div>
+                </div>
+                
                 <div class="files-container" id="filesContainer"></div>
                 <div class="sidebar-footer">
                     <div class="upload-area" id="uploadArea">
@@ -264,6 +294,10 @@
         const fileManagerEnabled = {{FILE_MANAGER_ENABLED}};
         const shellEnabled = {{SHELL_ENABLED}};
 
+        // NEW: Navigation Variables
+        let currentPath = '';  // Current directory path relative to working directory
+        let navigationHistory = [];
+
         // --- Editor Variables ---
         let currentEditingFile = null;
         let originalContent = '';
@@ -321,6 +355,72 @@
         });
         // --- SHELL TERMINAL FUNCTIONS END ---
 
+        // --- NEW: NAVIGATION FUNCTIONS START ---
+        function updateBreadcrumb() {
+            const breadcrumb = document.getElementById('breadcrumb');
+            const upBtn = document.getElementById('upBtn');
+            
+            // Clear existing breadcrumb
+            breadcrumb.innerHTML = '';
+            
+            // Add home/root
+            const homeItem = document.createElement('span');
+            homeItem.className = 'breadcrumb-item';
+            homeItem.textContent = '📁 Root';
+            homeItem.onclick = () => navigateToPath('');
+            breadcrumb.appendChild(homeItem);
+            
+            // Add path segments
+            if (currentPath) {
+                const segments = currentPath.split('/').filter(s => s);
+                segments.forEach((segment, index) => {
+                    const separator = document.createElement('span');
+                    separator.className = 'breadcrumb-separator';
+                    separator.textContent = '/';
+                    breadcrumb.appendChild(separator);
+                    
+                    const segmentPath = segments.slice(0, index + 1).join('/');
+                    const item = document.createElement('span');
+                    item.className = 'breadcrumb-item';
+                    item.textContent = segment;
+                    item.onclick = () => navigateToPath(segmentPath);
+                    breadcrumb.appendChild(item);
+                });
+                
+                // Mark last item as current
+                const lastItem = breadcrumb.lastElementChild;
+                if (lastItem) lastItem.classList.add('current');
+            } else {
+                homeItem.classList.add('current');
+            }
+            
+            // Update up button
+            upBtn.disabled = !currentPath;
+        }
+        
+        function navigateToPath(path) {
+            currentPath = path;
+            updateBreadcrumb();
+            refreshFiles();
+            addOutput(`📁 Navigated to: ${path || 'Root'}`, 'info');
+        }
+        
+        function navigateUp() {
+            if (!currentPath) return;
+            const parentPath = currentPath.split('/').slice(0, -1).join('/');
+            navigateToPath(parentPath);
+        }
+        
+        function navigateHome() {
+            navigateToPath('');
+        }
+        
+        function navigateInto(folderName) {
+            const newPath = currentPath ? `${currentPath}/${folderName}` : folderName;
+            navigateToPath(newPath);
+        }
+        // --- NEW: NAVIGATION FUNCTIONS END ---
+
         // --- CORE UI AND APP LOGIC START ---
         function initializeUI() {
             if (!fileManagerEnabled) {
@@ -328,6 +428,9 @@
                 document.getElementById('headerTitle').textContent = 'Snakeflex V1.6 - Python Web Terminal (Secure Mode)';
                 window.refreshFiles = () => {};
                 window.showCreateModal = () => addOutput('❌ File management disabled', 'stderr');
+            } else {
+                // Initialize navigation
+                updateBreadcrumb();
             }
             if (!shellEnabled) {
                 const shellBtn = document.getElementById('shellBtn');
@@ -337,38 +440,487 @@
             }
         }
 
-        async function refreshFiles() { if (!fileManagerEnabled) return; try { const response = await fetch('/api/files'); const result = await response.json(); if (result.success) { files = result.data; renderFiles(); } else { addOutput('❌ Failed to load files: ' + result.message, 'stderr'); } } catch (error) { addOutput('❌ Error loading files: ' + error.message, 'stderr'); } }
-        function renderFiles() { const container = document.getElementById('filesContainer'); if (!container) return; if (files.length === 0) { container.innerHTML = '<div style="padding: 20px; text-align: center; color: #7d8590;">No files found</div>'; return; } container.innerHTML = files.map(file => `<div class="file-item" data-path="${file.path}" data-is-dir="${file.isDir}" onclick="selectFile('${file.path}', ${file.isDir})" oncontextmenu="showContextMenu(event, '${file.path}', ${file.isDir})"><span class="file-icon">${file.isDir ? '📁' : getFileIcon(file.name)}</span><span class="file-name" title="${file.name}">${file.name}</span><div class="file-actions">${!file.isDir ? `<button class="action-btn" onclick="event.stopPropagation(); downloadFileByPath('${file.path}')" title="Download">📥</button>` : ''}<button class="action-btn" onclick="event.stopPropagation(); confirmDelete('${file.path}')" title="Delete">🗑️</button></div></div>`).join(''); }
+        async function refreshFiles() { 
+            if (!fileManagerEnabled) return; 
+            try { 
+                const response = await fetch(`/api/files?path=${encodeURIComponent(currentPath)}`); 
+                const result = await response.json(); 
+                if (result.success) { 
+                    files = result.data; 
+                    renderFiles(); 
+                } else { 
+                    addOutput('❌ Failed to load files: ' + result.message, 'stderr'); 
+                } 
+            } catch (error) { 
+                addOutput('❌ Error loading files: ' + error.message, 'stderr'); 
+            } 
+        }
+        
+        function renderFiles() { 
+            const container = document.getElementById('filesContainer'); 
+            if (!container) return; 
+            if (files.length === 0) { 
+                container.innerHTML = '<div style="padding: 20px; text-align: center; color: #7d8590;">No files found</div>'; 
+                return; 
+            } 
+            container.innerHTML = files.map(file => {
+                const fullPath = currentPath ? `${currentPath}/${file.name}` : file.name;
+                const clickHandler = file.isDir ? `onclick="navigateInto('${file.name}')"` : `onclick="selectFile('${fullPath}', ${file.isDir})"`;
+                const contextMenuHandler = file.isDir ? '' : `oncontextmenu="showContextMenu(event, '${fullPath}', ${file.isDir})"`;
+                
+                return `<div class="file-item ${file.isDir ? 'folder' : ''}" data-path="${fullPath}" data-is-dir="${file.isDir}" ${clickHandler} ${contextMenuHandler}>
+                    <span class="file-icon">${file.isDir ? '📁' : getFileIcon(file.name)}</span>
+                    <span class="file-name" title="${file.name}">${file.name}</span>
+                    <div class="file-actions">
+                        ${!file.isDir ? `<button class="action-btn" onclick="event.stopPropagation(); downloadFileByPath('${fullPath}')" title="Download">📥</button>` : ''}
+                        <button class="action-btn" onclick="event.stopPropagation(); confirmDelete('${fullPath}')" title="Delete">🗑️</button>
+                    </div>
+                </div>`;
+            }).join(''); 
+        }
+        
         function getFileIcon(filename) { const ext = filename.split('.').pop().toLowerCase(); const iconMap = { 'py': '🐍', 'js': '🟨', 'html': '🌐', 'css': '🎨', 'json': '📋', 'md': '📝', 'txt': '📄', 'png': '🖼️', 'jpg': '🖼️', 'jpeg': '🖼️', 'gif': '🖼️', 'pdf': '📕' }; return iconMap[ext] || '📄'; }
-        function selectFile(path, isDir) { document.querySelectorAll('.file-item').forEach(item => item.classList.remove('selected')); const item = document.querySelector(`[data-path="${path}"]`); if (item) { item.classList.add('selected'); selectedFile = { path, isDir }; } }
-        function showContextMenu(event, path, isDir) { event.preventDefault(); event.stopPropagation(); selectFile(path, isDir); const menu = document.getElementById('contextMenu'); const editItem = document.getElementById('contextMenuEdit'); const setExecItem = document.getElementById('contextMenuSetExec'); const separator = document.getElementById('contextMenuSeparator'); const isEditableFile = !isDir && (path.toLowerCase().endsWith('.py') || path.toLowerCase().endsWith('.txt') || path.toLowerCase().endsWith('.js') || path.toLowerCase().endsWith('.html') || path.toLowerCase().endsWith('.css') || path.toLowerCase().endsWith('.json') || path.toLowerCase().endsWith('.md')); if (isEditableFile) { editItem.style.display = 'block'; } else { editItem.style.display = 'none'; } if (!isDir && path.toLowerCase().endsWith('.py')) { setExecItem.style.display = 'block'; separator.style.display = 'block'; } else { setExecItem.style.display = 'none'; separator.style.display = 'none'; } menu.style.display = 'block'; menu.style.left = event.pageX + 'px'; menu.style.top = event.pageY + 'px'; }
+        
+        function selectFile(path, isDir) { 
+            if (isDir) return; // Folders are handled by navigation
+            document.querySelectorAll('.file-item').forEach(item => item.classList.remove('selected')); 
+            const item = document.querySelector(`[data-path="${path}"]`); 
+            if (item) { 
+                item.classList.add('selected'); 
+                selectedFile = { path, isDir }; 
+            } 
+        }
+        
+        function showContextMenu(event, path, isDir) { 
+            event.preventDefault(); 
+            event.stopPropagation(); 
+            selectFile(path, isDir); 
+            const menu = document.getElementById('contextMenu'); 
+            const editItem = document.getElementById('contextMenuEdit'); 
+            const setExecItem = document.getElementById('contextMenuSetExec'); 
+            const separator = document.getElementById('contextMenuSeparator'); 
+            const isEditableFile = !isDir && (path.toLowerCase().endsWith('.py') || path.toLowerCase().endsWith('.txt') || path.toLowerCase().endsWith('.js') || path.toLowerCase().endsWith('.html') || path.toLowerCase().endsWith('.css') || path.toLowerCase().endsWith('.json') || path.toLowerCase().endsWith('.md')); 
+            if (isEditableFile) { 
+                editItem.style.display = 'block'; 
+            } else { 
+                editItem.style.display = 'none'; 
+            } 
+            if (!isDir && path.toLowerCase().endsWith('.py')) { 
+                setExecItem.style.display = 'block'; 
+                separator.style.display = 'block'; 
+            } else { 
+                setExecItem.style.display = 'none'; 
+                separator.style.display = 'none'; 
+            } 
+            menu.style.display = 'block'; 
+            menu.style.left = event.pageX + 'px'; 
+            menu.style.top = event.pageY + 'px'; 
+        }
+        
         document.addEventListener('click', () => document.getElementById('contextMenu').style.display = 'none');
-        async function editFile() { if (!selectedFile || selectedFile.isDir) return; try { const response = await fetch(`/api/files/content?path=${encodeURIComponent(selectedFile.path)}`); const result = await response.json(); if (result.success) { currentEditingFile = selectedFile.path; originalContent = result.data.content; document.getElementById('editorTitle').textContent = `📝 Editing: ${selectedFile.path}`; document.getElementById('editorModal').style.display = 'block'; const ta = document.getElementById('editorTextarea'); ta.value = result.data.content; const isPy = currentEditingFile.toLowerCase().endsWith('.py'); if (!cm) { cm = CodeMirror.fromTextArea(ta, { mode: isPy ? 'python' : null, theme: 'material-darker', lineNumbers: true, indentUnit: 4, tabSize: 4, indentWithTabs: false, smartIndent: true, matchBrackets: true, autoCloseBrackets: true }); cm.addKeyMap({'Ctrl-S': () => saveFile(), 'Cmd-S':  () => saveFile(), 'Esc': () => closeEditor(), 'Ctrl-Space': () => maybeShowHints(cm), 'Tab': (cm) => { const widget = cm.state.completionActive; if (widget) { cm.state.completionActive.pick(); } else { cm.execCommand('defaultTab');}}}); cm.on('inputRead', (instance, changeObj) => { if (!currentEditingFile?.toLowerCase().endsWith('.py')) return; if (changeObj.origin === "+delete" || changeObj.origin === "complete") return; const typed = changeObj.text?.join('') ?? ''; if (/\w/.test(typed) || typed === '.') { maybeShowHints(cm); } }); cm.on('beforeChange', (instance, changeObj) => { if (!currentEditingFile?.toLowerCase().endsWith('.py')) return; if (changeObj.origin === '+input') { const text = changeObj.text.map(line => line.replace(/\t/g, ' '.repeat(4))); if (text.join('\n') !== changeObj.text.join('\n')) { changeObj.update(changeObj.from, changeObj.to, text, changeObj.origin);}}}); } else { cm.setValue(result.data.content); cm.setOption('mode', isPy ? 'python' : null); cm.setOption('indentWithTabs', isPy ? false : cm.getOption('indentWithTabs')); } setTimeout(() => cm.refresh() || cm.focus(), 50); } else { addOutput(`❌ Failed to load file: ${result.message}`, 'stderr'); } } catch (error) { addOutput(`❌ Error loading file: ${error.message}`, 'stderr'); } }
-        async function saveFile() { if (!currentEditingFile) return; let content = (typeof cm !== 'undefined' && cm) ? cm.getValue() : document.getElementById('editorTextarea').value; if (currentEditingFile && currentEditingFile.toLowerCase().endsWith('.py')) { content = content.replace(/\t/g, ' '.repeat(4)); } const statusEl = document.getElementById('editorStatus'); try { statusEl.textContent = 'Saving...'; const response = await fetch('/api/files/content', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: currentEditingFile, content: content }) }); const result = await response.json(); if (result.success) { originalContent = content; statusEl.textContent = 'File saved successfully!'; addOutput(`✅ Saved: ${currentEditingFile}`, 'success'); setTimeout(() => { statusEl.textContent = 'Press Ctrl+S to save • Press Escape to close'; }, 2000); } else { statusEl.textContent = `Save failed: ${result.message}`; addOutput(`❌ Save failed: ${result.message}`, 'stderr'); } } catch (error) { statusEl.textContent = `Save error: ${error.message}`; addOutput(`❌ Save error: ${error.message}`, 'stderr'); } }
-        function closeEditor() { const currentContent = (typeof cm !== 'undefined' && cm) ? cm.getValue() : document.getElementById('editorTextarea').value; if (currentContent !== originalContent) { if (!confirm('You have unsaved changes. Are you sure you want to close?')) { return; } } document.getElementById('editorModal').style.display = 'none'; currentEditingFile = null; originalContent = ''; }
-        function downloadFileByPath(path) { const link = document.createElement('a'); link.href = `/api/files/download?path=${encodeURIComponent(path)}`; link.download = path.split('/').pop(); link.click(); link.remove(); }
-        async function downloadFile() { if (!selectedFile || selectedFile.isDir) return; downloadFileByPath(selectedFile.path); }
-        function confirmDelete(path) { if (confirm(`Are you sure you want to delete "${path}"?`)) { deleteFileByPath(path); } }
-        async function deleteFileByPath(path) { try { const response = await fetch(`/api/files/delete?path=${encodeURIComponent(path)}`, { method: 'DELETE' }); const result = await response.json(); if (result.success) { addOutput(`✅ Deleted: ${path}`, 'success'); refreshFiles(); } else { addOutput(`❌ Delete failed: ${result.message}`, 'stderr'); } } catch (error) { addOutput(`❌ Delete error: ${error.message}`, 'stderr'); } }
-        async function deleteFile() { if (!selectedFile) return; deleteFileByPath(selectedFile.path); }
-        async function uploadFiles() { const files = document.getElementById('fileInput').files; if (files.length === 0) return; const formData = new FormData(); for (let file of files) formData.append('files', file); formData.append('path', '.'); try { const response = await fetch('/api/files/upload', { method: 'POST', body: formData }); const result = await response.json(); if (result.success) { addOutput(`✅ ${result.message}`, 'success'); refreshFiles(); } else { addOutput(`❌ Upload failed: ${result.message}`, 'stderr'); } } catch (error) { addOutput(`❌ Upload error: ${error.message}`, 'stderr'); } }
-        if (fileManagerEnabled) { const uploadArea = document.getElementById('uploadArea'); uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('drag-over'); }); uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('drag-over')); uploadArea.addEventListener('drop', async e => { e.preventDefault(); uploadArea.classList.remove('drag-over'); const files = e.dataTransfer.files; if (files.length === 0) return; const formData = new FormData(); for (let file of files) formData.append('files', file); try { const response = await fetch('/api/files/upload', { method: 'POST', body: formData }); const result = await response.json(); if (result.success) { addOutput(`✅ ${result.message}`, 'success'); refreshFiles(); } else { addOutput(`❌ Upload failed: ${result.message}`, 'stderr'); } } catch (error) { addOutput(`❌ Upload error: ${error.message}`, 'stderr'); } }); }
-        function showCreateModal(type) { createType = type; const modal = document.getElementById('createModal'); document.getElementById('modalTitle').textContent = `Create ${type}`; const input = document.getElementById('modalInput'); input.placeholder = `Enter ${type} name...`; input.value = ''; modal.style.display = 'block'; input.focus(); }
-        function closeCreateModal() { document.getElementById('createModal').style.display = 'none'; }
-        async function createItem() { const name = document.getElementById('modalInput').value.trim(); if (!name) return; try { const response = await fetch('/api/files/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: name, isDir: createType === 'folder' }) }); const result = await response.json(); if (result.success) { addOutput(`✅ Created ${createType}: ${name}`, 'success'); refreshFiles(); closeCreateModal(); } else { addOutput(`❌ Create failed: ${result.message}`, 'stderr'); } } catch (error) { addOutput(`❌ Create error: ${error.message}`, 'stderr'); } }
-        if (fileManagerEnabled) { document.getElementById('modalInput').addEventListener('keypress', e => { if (e.key === 'Enter') createItem(); }); const resizeHandle = document.getElementById('resizeHandle'); const sidebar = document.getElementById('sidebar'); resizeHandle.addEventListener('mousedown', () => { isResizing = true; document.addEventListener('mousemove', handleResize); document.addEventListener('mouseup', stopResize); }); function handleResize(e) { if (isResizing) sidebar.style.width = Math.max(200, Math.min(600, e.clientX)) + 'px'; } function stopResize() { isResizing = false; document.removeEventListener('mousemove', handleResize); document.removeEventListener('mouseup', stopResize); } }
-        function setExecutable() { if (!selectedFile || selectedFile.isDir) return; executableFile = selectedFile.path; updateExecutingFileUI(); addOutput(`✅ Set active script to: ${executableFile}`, 'success'); }
-        function updateExecutingFileUI() { const scriptName = executableFile || 'None'; document.getElementById('activeScript').textContent = scriptName; document.getElementById('runBtn').disabled = !executableFile || isRunning; const statusEl = document.getElementById('status'); if (!executableFile && !isRunning) { statusEl.textContent = 'Select Script'; } else if (!isRunning) { statusEl.textContent = 'Ready'; } }
-        function connectWebSocket() { const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'; ws = new WebSocket(`${protocol}//${location.host}/ws`); ws.onopen = () => addOutput(`🔗 WebSocket connected!`, 'success'); ws.onmessage = event => handleMessage(JSON.parse(event.data)); ws.onclose = () => { addOutput('❌ WebSocket closed. Reconnecting...', 'stderr'); setTimeout(connectWebSocket, 3000); }; }
-        function executeScript() { if (isRunning || !ws || ws.readyState !== WebSocket.OPEN) return; if (!executableFile) { addOutput('❌ No script selected. Right-click a Python file to set it.', 'stderr'); return; } isRunning = true; isWaitingForInput = false; lastLineElement = null; updateExecutingFileUI(); document.getElementById('status').textContent = 'Running'; document.getElementById('status').className = 'status running'; hideInputSection(); addOutput(`$ python ${executableFile}`, 'command-line'); ws.send(JSON.stringify({ type: 'execute', file: executableFile })); }
-        function handleMessage(data) { lastOutputTime = Date.now(); switch(data.type) { case 'stdout': addOutput(data.content, 'stdout'); let promptText = lastLineElement ? lastLineElement.textContent : ""; if (isRunning && !isWaitingForInput && promptText) { const trimmed = promptText.trim().toLowerCase(); if (promptText.trim().endsWith(':') || promptText.trim().endsWith('?') || trimmed.includes('enter') || trimmed.includes('input')) { setTimeout(() => { if (isRunning && !isWaitingForInput) showInputSection('Pattern detected'); }, 50); } } break; case 'stderr': addOutput(data.content, 'stderr'); break; case 'completed': addOutput('──────────────────────────────────────────', 'info'); addOutput(`✅ Script finished. ${data.content}`, 'success'); resetState(); break; case 'error': addOutput(`❌ Error: ${data.content}`, 'stderr'); resetState(); break; } }
-        function showInputSection(reason = 'Input required') { if (!isRunning || isWaitingForInput) return; isWaitingForInput = true; const inputSection = document.getElementById('inputSection'); inputSection.classList.add('show'); document.getElementById('status').textContent = 'Waiting for Input'; document.getElementById('status').className = 'status waiting-input'; setTimeout(() => document.getElementById('userInput')?.focus(), 100); addOutput(`⏳ ${reason}`, 'input-waiting'); document.getElementById('output').scrollTop = document.getElementById('output').scrollHeight; }
-        function hideInputSection() { document.getElementById('inputSection').classList.remove('show'); if (isRunning) { document.getElementById('status').textContent = 'Running'; document.getElementById('status').className = 'status running'; } }
-        function sendInput() { if (!isWaitingForInput || !ws || ws.readyState !== WebSocket.OPEN) return; const inputField = document.getElementById('userInput'); addOutput(`> ${inputField.value}`, 'input-prompt'); lastLineElement = null; ws.send(JSON.stringify({ type: 'input', input: inputField.value })); inputField.value = ''; hideInputSection(); isWaitingForInput = false; lastOutputTime = Date.now(); }
-        function handleInputKeyPress(event) { if (event.key === 'Enter') sendInput(); }
-        function resetState() { isRunning = false; isWaitingForInput = false; lastLineElement = null; updateExecutingFileUI(); hideInputSection(); }
-        function addOutput(text, className = 'stdout') { const output = document.getElementById('output'); if (text === '') return; const parts = text.split('\n'); if (parts[0]) { if (lastLineElement && !text.startsWith('\n')) { lastLineElement.textContent += parts[0]; } else { const lineDiv = document.createElement('div'); lineDiv.className = 'output-line ' + className; lineDiv.textContent = parts[0]; output.appendChild(lineDiv); lastLineElement = lineDiv; } } for (let i = 1; i < parts.length; i++) { lastLineElement = null; if (i === parts.length - 1 && parts[i] === '') continue; const lineDiv = document.createElement('div'); lineDiv.className = 'output-line ' + className; lineDiv.textContent = parts[i]; output.appendChild(lineDiv); lastLineElement = lineDiv; } if (text.endsWith('\n')) lastLineElement = null; output.scrollTop = output.scrollHeight; }
-        function clearOutput() { document.getElementById('output').innerHTML = `<div class="output-line info">Python Web Terminal - Interactive Execution</div><div class="output-line info">📂 Right-click a Python file and 'Set as Executable' to begin</div><div class="output-line">──────────────────────────────────────────</div>`; lastLineElement = null; }
+        
+        async function editFile() { 
+            if (!selectedFile || selectedFile.isDir) return; 
+            try { 
+                const response = await fetch(`/api/files/content?path=${encodeURIComponent(selectedFile.path)}`); 
+                const result = await response.json(); 
+                if (result.success) { 
+                    currentEditingFile = selectedFile.path; 
+                    originalContent = result.data.content; 
+                    document.getElementById('editorTitle').textContent = `📝 Editing: ${selectedFile.path}`; 
+                    document.getElementById('editorModal').style.display = 'block'; 
+                    const ta = document.getElementById('editorTextarea'); 
+                    ta.value = result.data.content; 
+                    const isPy = currentEditingFile.toLowerCase().endsWith('.py'); 
+                    if (!cm) { 
+                        cm = CodeMirror.fromTextArea(ta, { 
+                            mode: isPy ? 'python' : null, 
+                            theme: 'material-darker', 
+                            lineNumbers: true, 
+                            indentUnit: 4, 
+                            tabSize: 4, 
+                            indentWithTabs: false, 
+                            smartIndent: true, 
+                            matchBrackets: true, 
+                            autoCloseBrackets: true 
+                        }); 
+                        cm.addKeyMap({'Ctrl-S': () => saveFile(), 'Cmd-S':  () => saveFile(), 'Esc': () => closeEditor(), 'Ctrl-Space': () => maybeShowHints(cm), 'Tab': (cm) => { const widget = cm.state.completionActive; if (widget) { cm.state.completionActive.pick(); } else { cm.execCommand('defaultTab');}}}); 
+                        cm.on('inputRead', (instance, changeObj) => { 
+                            if (!currentEditingFile?.toLowerCase().endsWith('.py')) return; 
+                            if (changeObj.origin === "+delete" || changeObj.origin === "complete") return; 
+                            const typed = changeObj.text?.join('') ?? ''; 
+                            if (/\w/.test(typed) || typed === '.') { 
+                                maybeShowHints(cm); 
+                            } 
+                        }); 
+                        cm.on('beforeChange', (instance, changeObj) => { 
+                            if (!currentEditingFile?.toLowerCase().endsWith('.py')) return; 
+                            if (changeObj.origin === '+input') { 
+                                const text = changeObj.text.map(line => line.replace(/\t/g, ' '.repeat(4))); 
+                                if (text.join('\n') !== changeObj.text.join('\n')) { 
+                                    changeObj.update(changeObj.from, changeObj.to, text, changeObj.origin);
+                                }
+                            }
+                        }); 
+                    } else { 
+                        cm.setValue(result.data.content); 
+                        cm.setOption('mode', isPy ? 'python' : null); 
+                        cm.setOption('indentWithTabs', isPy ? false : cm.getOption('indentWithTabs')); 
+                    } 
+                    setTimeout(() => cm.refresh() || cm.focus(), 50); 
+                } else { 
+                    addOutput(`❌ Failed to load file: ${result.message}`, 'stderr'); 
+                } 
+            } catch (error) { 
+                addOutput(`❌ Error loading file: ${error.message}`, 'stderr'); 
+            } 
+        }
+        
+        async function saveFile() { 
+            if (!currentEditingFile) return; 
+            let content = (typeof cm !== 'undefined' && cm) ? cm.getValue() : document.getElementById('editorTextarea').value; 
+            if (currentEditingFile && currentEditingFile.toLowerCase().endsWith('.py')) { 
+                content = content.replace(/\t/g, ' '.repeat(4)); 
+            } 
+            const statusEl = document.getElementById('editorStatus'); 
+            try { 
+                statusEl.textContent = 'Saving...'; 
+                const response = await fetch('/api/files/content', { 
+                    method: 'PUT', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ path: currentEditingFile, content: content }) 
+                }); 
+                const result = await response.json(); 
+                if (result.success) { 
+                    originalContent = content; 
+                    statusEl.textContent = 'File saved successfully!'; 
+                    addOutput(`✅ Saved: ${currentEditingFile}`, 'success'); 
+                    setTimeout(() => { 
+                        statusEl.textContent = 'Press Ctrl+S to save • Press Escape to close'; 
+                    }, 2000); 
+                } else { 
+                    statusEl.textContent = `Save failed: ${result.message}`; 
+                    addOutput(`❌ Save failed: ${result.message}`, 'stderr'); 
+                } 
+            } catch (error) { 
+                statusEl.textContent = `Save error: ${error.message}`; 
+                addOutput(`❌ Save error: ${error.message}`, 'stderr'); 
+            } 
+        }
+        
+        function closeEditor() { 
+            const currentContent = (typeof cm !== 'undefined' && cm) ? cm.getValue() : document.getElementById('editorTextarea').value; 
+            if (currentContent !== originalContent) { 
+                if (!confirm('You have unsaved changes. Are you sure you want to close?')) { 
+                    return; 
+                } 
+            } 
+            document.getElementById('editorModal').style.display = 'none'; 
+            currentEditingFile = null; 
+            originalContent = ''; 
+        }
+        
+        function downloadFileByPath(path) { 
+            const link = document.createElement('a'); 
+            link.href = `/api/files/download?path=${encodeURIComponent(path)}`; 
+            link.download = path.split('/').pop(); 
+            link.click(); 
+            link.remove(); 
+        }
+        
+        async function downloadFile() { 
+            if (!selectedFile || selectedFile.isDir) return; 
+            downloadFileByPath(selectedFile.path); 
+        }
+        
+        function confirmDelete(path) { 
+            if (confirm(`Are you sure you want to delete "${path}"?`)) { 
+                deleteFileByPath(path); 
+            } 
+        }
+        
+        async function deleteFileByPath(path) { 
+            try { 
+                const response = await fetch(`/api/files/delete?path=${encodeURIComponent(path)}`, { method: 'DELETE' }); 
+                const result = await response.json(); 
+                if (result.success) { 
+                    addOutput(`✅ Deleted: ${path}`, 'success'); 
+                    refreshFiles(); 
+                } else { 
+                    addOutput(`❌ Delete failed: ${result.message}`, 'stderr'); 
+                } 
+            } catch (error) { 
+                addOutput(`❌ Delete error: ${error.message}`, 'stderr'); 
+            } 
+        }
+        
+        async function deleteFile() { 
+            if (!selectedFile) return; 
+            deleteFileByPath(selectedFile.path); 
+        }
+        
+        async function uploadFiles() { 
+            const files = document.getElementById('fileInput').files; 
+            if (files.length === 0) return; 
+            const formData = new FormData(); 
+            for (let file of files) formData.append('files', file); 
+            formData.append('path', currentPath); // Upload to current directory
+            try { 
+                const response = await fetch('/api/files/upload', { method: 'POST', body: formData }); 
+                const result = await response.json(); 
+                if (result.success) { 
+                    addOutput(`✅ ${result.message}`, 'success'); 
+                    refreshFiles(); 
+                } else { 
+                    addOutput(`❌ Upload failed: ${result.message}`, 'stderr'); 
+                } 
+            } catch (error) { 
+                addOutput(`❌ Upload error: ${error.message}`, 'stderr'); 
+            } 
+        }
+        
+        if (fileManagerEnabled) { 
+            const uploadArea = document.getElementById('uploadArea'); 
+            uploadArea.addEventListener('dragover', e => { 
+                e.preventDefault(); 
+                uploadArea.classList.add('drag-over'); 
+            }); 
+            uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('drag-over')); 
+            uploadArea.addEventListener('drop', async e => { 
+                e.preventDefault(); 
+                uploadArea.classList.remove('drag-over'); 
+                const files = e.dataTransfer.files; 
+                if (files.length === 0) return; 
+                const formData = new FormData(); 
+                for (let file of files) formData.append('files', file); 
+                formData.append('path', currentPath); // Upload to current directory
+                try { 
+                    const response = await fetch('/api/files/upload', { method: 'POST', body: formData }); 
+                    const result = await response.json(); 
+                    if (result.success) { 
+                        addOutput(`✅ ${result.message}`, 'success'); 
+                        refreshFiles(); 
+                    } else { 
+                        addOutput(`❌ Upload failed: ${result.message}`, 'stderr'); 
+                    } 
+                } catch (error) { 
+                    addOutput(`❌ Upload error: ${error.message}`, 'stderr'); 
+                } 
+            }); 
+        }
+        
+        function showCreateModal(type) { 
+            createType = type; 
+            const modal = document.getElementById('createModal'); 
+            document.getElementById('modalTitle').textContent = `Create ${type}`; 
+            const input = document.getElementById('modalInput'); 
+            input.placeholder = `Enter ${type} name...`; 
+            input.value = ''; 
+            modal.style.display = 'block'; 
+            input.focus(); 
+        }
+        
+        function closeCreateModal() { 
+            document.getElementById('createModal').style.display = 'none'; 
+        }
+        
+        async function createItem() { 
+            const name = document.getElementById('modalInput').value.trim(); 
+            if (!name) return; 
+            const itemPath = currentPath ? `${currentPath}/${name}` : name;
+            try { 
+                const response = await fetch('/api/files/create', { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ path: itemPath, isDir: createType === 'folder' }) 
+                }); 
+                const result = await response.json(); 
+                if (result.success) { 
+                    addOutput(`✅ Created ${createType}: ${itemPath}`, 'success'); 
+                    refreshFiles(); 
+                    closeCreateModal(); 
+                } else { 
+                    addOutput(`❌ Create failed: ${result.message}`, 'stderr'); 
+                } 
+            } catch (error) { 
+                addOutput(`❌ Create error: ${error.message}`, 'stderr'); 
+            } 
+        }
+        
+        if (fileManagerEnabled) { 
+            document.getElementById('modalInput').addEventListener('keypress', e => { 
+                if (e.key === 'Enter') createItem(); 
+            }); 
+            const resizeHandle = document.getElementById('resizeHandle'); 
+            const sidebar = document.getElementById('sidebar'); 
+            resizeHandle.addEventListener('mousedown', () => { 
+                isResizing = true; 
+                document.addEventListener('mousemove', handleResize); 
+                document.addEventListener('mouseup', stopResize); 
+            }); 
+            function handleResize(e) { 
+                if (isResizing) sidebar.style.width = Math.max(200, Math.min(600, e.clientX)) + 'px'; 
+            } 
+            function stopResize() { 
+                isResizing = false; 
+                document.removeEventListener('mousemove', handleResize); 
+                document.removeEventListener('mouseup', stopResize); 
+            } 
+        }
+        
+        function setExecutable() { 
+            if (!selectedFile || selectedFile.isDir) return; 
+            executableFile = selectedFile.path; 
+            updateExecutingFileUI(); 
+            addOutput(`✅ Set active script to: ${executableFile}`, 'success'); 
+        }
+        
+        function updateExecutingFileUI() { 
+            const scriptName = executableFile || 'None'; 
+            document.getElementById('activeScript').textContent = scriptName; 
+            document.getElementById('runBtn').disabled = !executableFile || isRunning; 
+            const statusEl = document.getElementById('status'); 
+            if (!executableFile && !isRunning) { 
+                statusEl.textContent = 'Select Script'; 
+            } else if (!isRunning) { 
+                statusEl.textContent = 'Ready'; 
+            } 
+        }
+        
+        function connectWebSocket() { 
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'; 
+            ws = new WebSocket(`${protocol}//${location.host}/ws`); 
+            ws.onopen = () => addOutput(`🔗 WebSocket connected!`, 'success'); 
+            ws.onmessage = event => handleMessage(JSON.parse(event.data)); 
+            ws.onclose = () => { 
+                addOutput('❌ WebSocket closed. Reconnecting...', 'stderr'); 
+                setTimeout(connectWebSocket, 3000); 
+            }; 
+        }
+        
+        function executeScript() { 
+            if (isRunning || !ws || ws.readyState !== WebSocket.OPEN) return; 
+            if (!executableFile) { 
+                addOutput('❌ No script selected. Right-click a Python file to set it.', 'stderr'); 
+                return; 
+            } 
+            isRunning = true; 
+            isWaitingForInput = false; 
+            lastLineElement = null; 
+            updateExecutingFileUI(); 
+            document.getElementById('status').textContent = 'Running'; 
+            document.getElementById('status').className = 'status running'; 
+            hideInputSection(); 
+            addOutput(`$ python ${executableFile}`, 'command-line'); 
+            ws.send(JSON.stringify({ type: 'execute', file: executableFile })); 
+        }
+        
+        function handleMessage(data) { 
+            lastOutputTime = Date.now(); 
+            switch(data.type) { 
+                case 'stdout': 
+                    addOutput(data.content, 'stdout'); 
+                    let promptText = lastLineElement ? lastLineElement.textContent : ""; 
+                    if (isRunning && !isWaitingForInput && promptText) { 
+                        const trimmed = promptText.trim().toLowerCase(); 
+                        if (promptText.trim().endsWith(':') || promptText.trim().endsWith('?') || trimmed.includes('enter') || trimmed.includes('input')) { 
+                            setTimeout(() => { 
+                                if (isRunning && !isWaitingForInput) showInputSection('Pattern detected'); 
+                            }, 50); 
+                        } 
+                    } 
+                    break; 
+                case 'stderr': 
+                    addOutput(data.content, 'stderr'); 
+                    break; 
+                case 'completed': 
+                    addOutput('──────────────────────────────────────────', 'info'); 
+                    addOutput(`✅ Script finished. ${data.content}`, 'success'); 
+                    resetState(); 
+                    break; 
+                case 'error': 
+                    addOutput(`❌ Error: ${data.content}`, 'stderr'); 
+                    resetState(); 
+                    break; 
+            } 
+        }
+        
+        function showInputSection(reason = 'Input required') { 
+            if (!isRunning || isWaitingForInput) return; 
+            isWaitingForInput = true; 
+            const inputSection = document.getElementById('inputSection'); 
+            inputSection.classList.add('show'); 
+            document.getElementById('status').textContent = 'Waiting for Input'; 
+            document.getElementById('status').className = 'status waiting-input'; 
+            setTimeout(() => document.getElementById('userInput')?.focus(), 100); 
+            addOutput(`⏳ ${reason}`, 'input-waiting'); 
+            document.getElementById('output').scrollTop = document.getElementById('output').scrollHeight; 
+        }
+        
+        function hideInputSection() { 
+            document.getElementById('inputSection').classList.remove('show'); 
+            if (isRunning) { 
+                document.getElementById('status').textContent = 'Running'; 
+                document.getElementById('status').className = 'status running'; 
+            } 
+        }
+        
+        function sendInput() { 
+            if (!isWaitingForInput || !ws || ws.readyState !== WebSocket.OPEN) return; 
+            const inputField = document.getElementById('userInput'); 
+            addOutput(`> ${inputField.value}`, 'input-prompt'); 
+            lastLineElement = null; 
+            ws.send(JSON.stringify({ type: 'input', input: inputField.value })); 
+            inputField.value = ''; 
+            hideInputSection(); 
+            isWaitingForInput = false; 
+            lastOutputTime = Date.now(); 
+        }
+        
+        function handleInputKeyPress(event) { 
+            if (event.key === 'Enter') sendInput(); 
+        }
+        
+        function resetState() { 
+            isRunning = false; 
+            isWaitingForInput = false; 
+            lastLineElement = null; 
+            updateExecutingFileUI(); 
+            hideInputSection(); 
+        }
+        
+        function addOutput(text, className = 'stdout') { 
+            const output = document.getElementById('output'); 
+            if (text === '') return; 
+            const parts = text.split('\n'); 
+            if (parts[0]) { 
+                if (lastLineElement && !text.startsWith('\n')) { 
+                    lastLineElement.textContent += parts[0]; 
+                } else { 
+                    const lineDiv = document.createElement('div'); 
+                    lineDiv.className = 'output-line ' + className; 
+                    lineDiv.textContent = parts[0]; 
+                    output.appendChild(lineDiv); 
+                    lastLineElement = lineDiv; 
+                } 
+            } 
+            for (let i = 1; i < parts.length; i++) { 
+                lastLineElement = null; 
+                if (i === parts.length - 1 && parts[i] === '') continue; 
+                const lineDiv = document.createElement('div'); 
+                lineDiv.className = 'output-line ' + className; 
+                lineDiv.textContent = parts[i]; 
+                output.appendChild(lineDiv); 
+                lastLineElement = lineDiv; 
+            } 
+            if (text.endsWith('\n')) lastLineElement = null; 
+            output.scrollTop = output.scrollHeight; 
+        }
+        
+        function clearOutput() { 
+            document.getElementById('output').innerHTML = `<div class="output-line info">Python Web Terminal - Interactive Execution</div><div class="output-line info">📂 Right-click a Python file and 'Set as Executable' to begin</div><div class="output-line">──────────────────────────────────────────</div>`; 
+            lastLineElement = null; 
+        }
         
         window.onload = function() {
             initializeUI();
