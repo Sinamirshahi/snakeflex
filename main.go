@@ -1,7 +1,11 @@
 package main
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
 	"embed"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -30,6 +34,76 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+type AuthConfig struct {
+	Password string
+	Enabled  bool
+}
+
+type SessionManager struct {
+	sessions map[string]time.Time
+	mutex    sync.RWMutex
+}
+
+func NewSessionManager() *SessionManager {
+	sm := &SessionManager{
+		sessions: make(map[string]time.Time),
+	}
+
+	// Clean up expired sessions every hour
+	go func() {
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			sm.CleanupExpiredSessions()
+		}
+	}()
+
+	return sm
+}
+
+func (sm *SessionManager) CreateSession() string {
+	sm.mutex.Lock()
+	defer sm.mutex.Unlock()
+
+	// Generate secure random token
+	bytes := make([]byte, 32)
+	rand.Read(bytes)
+	token := base64.URLEncoding.EncodeToString(bytes)
+
+	// Session expires in 24 hours
+	sm.sessions[token] = time.Now().Add(24 * time.Hour)
+	return token
+}
+
+func (sm *SessionManager) ValidateSession(token string) bool {
+	sm.mutex.RLock()
+	defer sm.mutex.RUnlock()
+
+	expiry, exists := sm.sessions[token]
+	if !exists {
+		return false
+	}
+
+	if time.Now().After(expiry) {
+		delete(sm.sessions, token)
+		return false
+	}
+
+	return true
+}
+
+func (sm *SessionManager) CleanupExpiredSessions() {
+	sm.mutex.Lock()
+	defer sm.mutex.Unlock()
+
+	now := time.Now()
+	for token, expiry := range sm.sessions {
+		if now.After(expiry) {
+			delete(sm.sessions, token)
+		}
+	}
+}
+
 type TerminalServer struct {
 	pythonFile         string
 	verbose            bool
@@ -37,6 +111,8 @@ type TerminalServer struct {
 	workingDir         string
 	fileManagerEnabled bool
 	shellEnabled       bool
+	authConfig         *AuthConfig
+	sessionManager     *SessionManager
 }
 
 type Message struct {
@@ -156,7 +232,248 @@ func verifyPython3(pythonCmd string) bool {
 	return len(version) >= 8 && version[:8] == "Python 3"
 }
 
-// NEW: Enhanced getDirectoryTree with navigation support
+func hashPassword(password string) string {
+	hasher := sha256.New()
+	hasher.Write([]byte(password))
+	return hex.EncodeToString(hasher.Sum(nil))
+}
+
+// Authentication middleware
+func (ts *TerminalServer) requireAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !ts.authConfig.Enabled {
+			next(w, r)
+			return
+		}
+
+		// Check for session cookie
+		cookie, err := r.Cookie("snakeflex_session")
+		if err != nil || !ts.sessionManager.ValidateSession(cookie.Value) {
+			// Redirect to login page
+			if r.URL.Path == "/login" {
+				next(w, r)
+				return
+			}
+			http.Redirect(w, r, "/login", http.StatusFound)
+			return
+		}
+
+		next(w, r)
+	}
+}
+
+// Login handler
+func (ts *TerminalServer) loginHandler(w http.ResponseWriter, r *http.Request) {
+	if !ts.authConfig.Enabled {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+
+	switch r.Method {
+	case "GET":
+		ts.serveLoginPage(w, r)
+	case "POST":
+		ts.handleLogin(w, r)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (ts *TerminalServer) serveLoginPage(w http.ResponseWriter, r *http.Request) {
+	loginHTML := `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snakeflex - Authentication Required</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            background: linear-gradient(135deg, #0d1117 0%, #161b22 100%); 
+            color: #c9d1d9; 
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace; 
+            height: 100vh; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+        }
+        .login-container {
+            background: #21262d;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 40px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+        .logo {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        .title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 30px;
+            background: linear-gradient(135deg, #58a6ff, #1f6feb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .form-input {
+            width: 100%;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 12px 16px;
+            color: #c9d1d9;
+            font-family: inherit;
+            font-size: 16px;
+            transition: border-color 0.2s;
+        }
+        .form-input:focus {
+            outline: none;
+            border-color: #1f6feb;
+            box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.3);
+        }
+        .login-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #238636, #2ea043);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .login-btn:hover {
+            background: linear-gradient(135deg, #2ea043, #238636);
+            transform: translateY(-1px);
+        }
+        .error-message {
+            background: #da3633;
+            color: white;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        .info-text {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #7d8590;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="logo">🐍</div>
+        <h1 class="title">Snakeflex Terminal</h1>
+        
+        {{ERROR_MESSAGE}}
+        
+        <form method="POST" action="/login">
+            <div class="form-group">
+                <label class="form-label" for="password">Access Password:</label>
+                <input type="password" id="password" name="password" class="form-input" 
+                       placeholder="Enter your password..." required autofocus>
+            </div>
+            <button type="submit" class="login-btn">🔓 Access Terminal</button>
+        </form>
+        
+        <div class="info-text">
+            🔒 This terminal is password protected.<br>
+            Enter the correct password to access the Python environment.
+        </div>
+    </div>
+    
+    <script>
+        document.getElementById('password').focus();
+        document.querySelector('form').addEventListener('submit', function(e) {
+            const btn = document.querySelector('.login-btn');
+            btn.textContent = '🔄 Authenticating...';
+            btn.disabled = true;
+        });
+    </script>
+</body>
+</html>`
+
+	errorMsg := ""
+	if r.URL.Query().Get("error") == "1" {
+		errorMsg = `<div class="error-message">❌ Invalid password. Please try again.</div>`
+	}
+
+	loginHTML = strings.ReplaceAll(loginHTML, "{{ERROR_MESSAGE}}", errorMsg)
+
+	w.Header().Set("Content-Type", "text/html")
+	fmt.Fprint(w, loginHTML)
+}
+
+func (ts *TerminalServer) handleLogin(w http.ResponseWriter, r *http.Request) {
+	password := r.FormValue("password")
+
+	// Hash the provided password and compare
+	hashedPassword := hashPassword(password)
+
+	if hashedPassword == ts.authConfig.Password {
+		// Create session
+		sessionToken := ts.sessionManager.CreateSession()
+
+		// Set secure session cookie
+		cookie := &http.Cookie{
+			Name:     "snakeflex_session",
+			Value:    sessionToken,
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   r.TLS != nil, // Only secure if HTTPS
+			SameSite: http.SameSiteStrictMode,
+			Expires:  time.Now().Add(24 * time.Hour),
+		}
+		http.SetCookie(w, cookie)
+
+		if ts.verbose {
+			log.Printf("✅ Successful authentication from %s", r.RemoteAddr)
+		}
+
+		http.Redirect(w, r, "/", http.StatusFound)
+	} else {
+		if ts.verbose {
+			log.Printf("❌ Failed authentication attempt from %s", r.RemoteAddr)
+		}
+		http.Redirect(w, r, "/login?error=1", http.StatusFound)
+	}
+}
+
+// Logout handler
+func (ts *TerminalServer) logoutHandler(w http.ResponseWriter, r *http.Request) {
+	// Clear session cookie
+	cookie := &http.Cookie{
+		Name:     "snakeflex_session",
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Expires:  time.Unix(0, 0),
+	}
+	http.SetCookie(w, cookie)
+
+	http.Redirect(w, r, "/login", http.StatusFound)
+}
+
+// Enhanced getDirectoryTree with navigation support
 func (ts *TerminalServer) getDirectoryTree(dirPath string) ([]FileInfo, error) {
 	var files []FileInfo
 
@@ -223,7 +540,7 @@ func (ts *TerminalServer) getDirectoryTree(dirPath string) ([]FileInfo, error) {
 	return files, nil
 }
 
-// NEW: Helper function to validate and resolve paths
+// Helper function to validate and resolve paths
 func (ts *TerminalServer) validateAndResolvePath(relativePath string) (string, error) {
 	if relativePath == "" {
 		return ts.workingDir, nil
@@ -280,6 +597,7 @@ func main() {
 	htmlFile := flag.String("template", "terminal.html", "HTML template file (will use embedded if not found)")
 	disableFileManager := flag.Bool("disable-file-manager", false, "Disable file management features for security")
 	disableShell := flag.Bool("disable-shell", false, "Disable the interactive shell feature")
+	password := flag.String("pass", "", "Set password for authentication (optional)")
 	flag.Parse()
 
 	workingDir, err := os.Getwd()
@@ -307,6 +625,16 @@ func main() {
 		fmt.Printf("🐍 Detected Python command: %s (OS: %s)\n", pythonCmd, runtime.GOOS)
 	}
 
+	// Initialize authentication
+	authConfig := &AuthConfig{
+		Enabled: *password != "",
+	}
+
+	if authConfig.Enabled {
+		authConfig.Password = hashPassword(*password)
+		fmt.Printf("🔒 Password authentication enabled\n")
+	}
+
 	server := &TerminalServer{
 		pythonFile:         *pythonFile,
 		verbose:            *verbose,
@@ -314,24 +642,29 @@ func main() {
 		workingDir:         workingDir,
 		fileManagerEnabled: !*disableFileManager,
 		shellEnabled:       !*disableShell,
+		authConfig:         authConfig,
+		sessionManager:     NewSessionManager(),
 	}
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	// Setup routes with authentication
+	http.HandleFunc("/login", server.loginHandler)
+	http.HandleFunc("/logout", server.logoutHandler)
+	http.HandleFunc("/", server.requireAuth(func(w http.ResponseWriter, r *http.Request) {
 		server.terminalHandler(w, r, *htmlFile)
-	})
-	http.HandleFunc("/ws", server.websocketHandler)
+	}))
+	http.HandleFunc("/ws", server.requireAuth(server.websocketHandler))
 
 	if server.shellEnabled {
-		http.HandleFunc("/ws-shell", server.shellWebsocketHandler)
+		http.HandleFunc("/ws-shell", server.requireAuth(server.shellWebsocketHandler))
 	}
 
 	if server.fileManagerEnabled {
-		http.HandleFunc("/api/files", server.filesHandler)
-		http.HandleFunc("/api/files/content", server.fileContentHandler)
-		http.HandleFunc("/api/files/download", server.downloadHandler)
-		http.HandleFunc("/api/files/upload", server.uploadHandler)
-		http.HandleFunc("/api/files/create", server.createHandler)
-		http.HandleFunc("/api/files/delete", server.deleteHandler)
+		http.HandleFunc("/api/files", server.requireAuth(server.filesHandler))
+		http.HandleFunc("/api/files/content", server.requireAuth(server.fileContentHandler))
+		http.HandleFunc("/api/files/download", server.requireAuth(server.downloadHandler))
+		http.HandleFunc("/api/files/upload", server.requireAuth(server.uploadHandler))
+		http.HandleFunc("/api/files/create", server.requireAuth(server.createHandler))
+		http.HandleFunc("/api/files/delete", server.requireAuth(server.deleteHandler))
 	}
 
 	serverPort := ":" + *port
@@ -355,6 +688,10 @@ func main() {
 		fmt.Println("⌨️ Interactive shell enabled at /ws-shell")
 	} else {
 		fmt.Println("🔒 Interactive shell has been disabled via command-line flag.")
+	}
+
+	if authConfig.Enabled {
+		fmt.Printf("🔐 Access the terminal at: http://localhost%s/login\n", serverPort)
 	}
 
 	if err := http.ListenAndServe(serverPort, nil); err != nil {
@@ -454,7 +791,7 @@ func (ts *TerminalServer) terminalHandler(w http.ResponseWriter, r *http.Request
 	fmt.Fprint(w, htmlStr)
 }
 
-// UPDATED: Enhanced filesHandler with navigation support
+// Enhanced filesHandler with navigation support
 func (ts *TerminalServer) filesHandler(w http.ResponseWriter, r *http.Request) {
 	if !ts.fileManagerEnabled {
 		http.Error(w, "File management disabled", http.StatusForbidden)
