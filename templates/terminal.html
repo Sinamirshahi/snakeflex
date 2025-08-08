@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Snakeflex V4.6 - Python Web Terminal</title>
+    <title>Snakeflex V1.6 - Python Web Terminal</title>
     <style>
         * {
             margin: 0;
@@ -642,7 +642,7 @@ li.CodeMirror-hint-active {
         <div class="header">
             <div class="header-title">
                 <span>🐍</span>
-                <span id="headerTitle">Snakeflex V4.6 - Python Web Terminal</span>
+                <span id="headerTitle">Snakeflex V1.6 - Python Web Terminal</span>
             </div>
             <div class="header-controls">
                 <button class="control-btn close"></button>
@@ -842,7 +842,7 @@ li.CodeMirror-hint-active {
         function initializeUI() {
             if (!fileManagerEnabled) {
                 document.getElementById('sidebar')?.classList.add('hidden');
-                document.getElementById('headerTitle').textContent = 'Snakeflex V4.6 - Python Web Terminal (Secure Mode)';
+                document.getElementById('headerTitle').textContent = 'Snakeflex V1.6 - Python Web Terminal (Secure Mode)';
                 window.refreshFiles = () => {};
                 window.showCreateModal = () => addOutput('❌ File management disabled', 'stderr');
             }
