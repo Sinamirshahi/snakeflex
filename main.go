@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/creack/pty"
 	"github.com/gorilla/websocket"
 )
 
@@ -35,6 +36,7 @@ type TerminalServer struct {
 	pythonCmd          string
 	workingDir         string
 	fileManagerEnabled bool
+	shellEnabled       bool // New field to track shell status
 }
 
 type Message struct {
@@ -42,6 +44,13 @@ type Message struct {
 	Content string `json:"content,omitempty"`
 	Input   string `json:"input,omitempty"`
 	File    string `json:"file,omitempty"`
+}
+
+type ShellMessage struct {
+	Type string  `json:"type"`
+	Data string  `json:"data,omitempty"`
+	Cols float64 `json:"cols,omitempty"`
+	Rows float64 `json:"rows,omitempty"`
 }
 
 type FileInfo struct {
@@ -217,11 +226,14 @@ func generateMinimalHTML() string {
 }
 
 func main() {
+	// Define all command-line flags
 	pythonFile := flag.String("file", "", "Python file to execute (optional)")
 	port := flag.String("port", "8090", "Port to run server on")
 	verbose := flag.Bool("verbose", false, "Enable verbose logging")
 	htmlFile := flag.String("template", "terminal.html", "HTML template file (will use embedded if not found)")
 	disableFileManager := flag.Bool("disable-file-manager", false, "Disable file management features for security")
+	// NEW: Flag to disable the interactive shell
+	disableShell := flag.Bool("disable-shell", false, "Disable the interactive shell feature")
 	flag.Parse()
 
 	workingDir, err := os.Getwd()
@@ -255,12 +267,18 @@ func main() {
 		pythonCmd:          pythonCmd,
 		workingDir:         workingDir,
 		fileManagerEnabled: !*disableFileManager,
+		shellEnabled:       !*disableShell, // Set server status based on the flag
 	}
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		server.terminalHandler(w, r, *htmlFile)
 	})
 	http.HandleFunc("/ws", server.websocketHandler)
+
+	// Conditionally register the interactive shell handler
+	if server.shellEnabled {
+		http.HandleFunc("/ws-shell", server.shellWebsocketHandler)
+	}
 
 	if server.fileManagerEnabled {
 		http.HandleFunc("/api/files", server.filesHandler)
@@ -288,9 +306,91 @@ func main() {
 		fmt.Println("🔒 File management disabled for security")
 	}
 
+	// Print status of the interactive shell
+	if server.shellEnabled {
+		fmt.Println("⌨️ Interactive shell enabled at /ws-shell")
+	} else {
+		fmt.Println("🔒 Interactive shell has been disabled via command-line flag.")
+	}
+
 	if err := http.ListenAndServe(serverPort, nil); err != nil {
 		log.Fatal("Error starting server:", err)
 	}
+}
+
+func (ts *TerminalServer) shellWebsocketHandler(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("Shell WebSocket upgrade error: %v", err)
+		return
+	}
+	defer conn.Close()
+
+	var shellCmd string
+	if runtime.GOOS == "windows" {
+		shellCmd = "powershell.exe"
+	} else {
+		shellCmd = "bash"
+	}
+
+	cmd := exec.Command(shellCmd)
+	cmd.Dir = ts.workingDir
+	cmd.Env = os.Environ()
+
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		log.Printf("Failed to start pty: %v", err)
+		conn.WriteMessage(websocket.TextMessage, []byte("Error: Failed to start shell."))
+		return
+	}
+	defer ptmx.Close()
+
+	go func() {
+		defer conn.Close()
+		buf := make([]byte, 1024)
+		for {
+			n, err := ptmx.Read(buf)
+			if err != nil {
+				if err != io.EOF {
+					log.Printf("Error reading from pty: %v", err)
+				}
+				break
+			}
+			err = conn.WriteMessage(websocket.BinaryMessage, buf[:n])
+			if err != nil {
+				log.Printf("Error writing to shell websocket: %v", err)
+				break
+			}
+		}
+	}()
+
+	for {
+		_, message, err := conn.ReadMessage()
+		if err != nil {
+			log.Printf("Error reading from shell websocket: %v", err)
+			break
+		}
+
+		var msg ShellMessage
+		if err := json.Unmarshal(message, &msg); err == nil {
+			switch msg.Type {
+			case "resize":
+				if ts.verbose {
+					log.Printf("Resizing PTY to %v rows and %v cols", msg.Rows, msg.Cols)
+				}
+				pty.Setsize(ptmx, &pty.Winsize{
+					Rows: uint16(msg.Rows),
+					Cols: uint16(msg.Cols),
+				})
+			case "input":
+				if _, err := ptmx.Write([]byte(msg.Data)); err != nil {
+					log.Printf("Error writing to pty: %v", err)
+					break
+				}
+			}
+		}
+	}
+	cmd.Wait()
 }
 
 func (ts *TerminalServer) terminalHandler(w http.ResponseWriter, r *http.Request, htmlFile string) {
@@ -300,6 +400,8 @@ func (ts *TerminalServer) terminalHandler(w http.ResponseWriter, r *http.Request
 	htmlStr = strings.ReplaceAll(htmlStr, "{{INITIAL_PYTHON_FILE}}", ts.pythonFile)
 	htmlStr = strings.ReplaceAll(htmlStr, "{{WORKING_DIR}}", ts.workingDir)
 	htmlStr = strings.ReplaceAll(htmlStr, "{{FILE_MANAGER_ENABLED}}", fmt.Sprintf("%t", ts.fileManagerEnabled))
+	// NEW: Pass the shell enabled status to the frontend
+	htmlStr = strings.ReplaceAll(htmlStr, "{{SHELL_ENABLED}}", fmt.Sprintf("%t", ts.shellEnabled))
 
 	if isEmbedded {
 		htmlStr = strings.ReplaceAll(htmlStr, `id="embeddedNotice" style="display: none;"`, `id="embeddedNotice"`)
@@ -309,6 +411,7 @@ func (ts *TerminalServer) terminalHandler(w http.ResponseWriter, r *http.Request
 	fmt.Fprint(w, htmlStr)
 }
 
+// ... rest of the file is unchanged ...
 func (ts *TerminalServer) filesHandler(w http.ResponseWriter, r *http.Request) {
 	if !ts.fileManagerEnabled {
 		http.Error(w, "File management disabled", http.StatusForbidden)
@@ -350,7 +453,6 @@ func (ts *TerminalServer) fileContentHandler(w http.ResponseWriter, r *http.Requ
 
 	switch r.Method {
 	case "GET":
-		// Read file content
 		filePath := r.URL.Query().Get("path")
 		if filePath == "" {
 			json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Path parameter required"})
@@ -364,7 +466,6 @@ func (ts *TerminalServer) fileContentHandler(w http.ResponseWriter, r *http.Requ
 			return
 		}
 
-		// Check if file exists and is not a directory
 		info, err := os.Stat(absPath)
 		if err != nil {
 			json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "File not found"})
@@ -387,7 +488,6 @@ func (ts *TerminalServer) fileContentHandler(w http.ResponseWriter, r *http.Requ
 		})
 
 	case "PUT":
-		// Save file content
 		var req struct {
 			Path    string `json:"path"`
 			Content string `json:"content"`
@@ -599,7 +699,6 @@ func (ts *TerminalServer) websocketHandler(w http.ResponseWriter, r *http.Reques
 		log.Printf("WebSocket connection established from %s", r.RemoteAddr)
 	}
 
-	// ✅ FIX: State for the current input channel is managed here, per connection.
 	var currentInputChan chan string
 	var chanMutex sync.Mutex
 
@@ -615,24 +714,16 @@ func (ts *TerminalServer) websocketHandler(w http.ResponseWriter, r *http.Reques
 
 		switch msg.Type {
 		case "execute":
-			// ✅ FIX: Create a NEW channel for each execution.
 			newChan := make(chan string, 10)
-
-			// ✅ FIX: Safely swap the active channel.
 			chanMutex.Lock()
 			currentInputChan = newChan
 			chanMutex.Unlock()
-
-			// ✅ FIX: Pass the new, single-use channel to the execution goroutine.
 			go ts.executePythonScript(safeConn, newChan, msg.File)
 
 		case "input":
-			// ✅ FIX: Safely get the current channel.
 			chanMutex.Lock()
 			targetChan := currentInputChan
 			chanMutex.Unlock()
-
-			// ✅ FIX: Send input to the currently active channel.
 			if targetChan != nil {
 				if ts.verbose {
 					log.Printf("Received input: %s", msg.Input)
@@ -644,7 +735,6 @@ func (ts *TerminalServer) websocketHandler(w http.ResponseWriter, r *http.Reques
 }
 
 func (ts *TerminalServer) executePythonScript(safeConn *SafeWebSocketConn, inputChan chan string, pythonFile string) {
-	// --- Security Check ---
 	if pythonFile == "" {
 		safeConn.SendMessage(Message{Type: "error", Content: "No Python file specified for execution."})
 		close(inputChan)
@@ -663,7 +753,6 @@ func (ts *TerminalServer) executePythonScript(safeConn *SafeWebSocketConn, input
 		close(inputChan)
 		return
 	}
-	// --- End Security Check ---
 
 	if runtime.GOOS == "windows" {
 		ts.executeWindowsScript(safeConn, inputChan, absPath)
@@ -677,21 +766,9 @@ func (ts *TerminalServer) executeWindowsScript(safeConn *SafeWebSocketConn, inpu
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "PYTHONIOENCODING=utf-8", "PYTHONUNBUFFERED=1", "PYTHONUTF8=1")
 
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to create stdin pipe: %v", err)})
-		return
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to create stdout pipe: %v", err)})
-		return
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to create stderr pipe: %v", err)})
-		return
-	}
+	stdin, _ := cmd.StdinPipe()
+	stdout, _ := cmd.StdoutPipe()
+	stderr, _ := cmd.StderrPipe()
 	if err := cmd.Start(); err != nil {
 		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to start command: %v", err)})
 		return
@@ -712,21 +789,10 @@ func (ts *TerminalServer) executePTYScript(safeConn *SafeWebSocketConn, inputCha
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "PYTHONIOENCODING=utf-8", "PYTHONUNBUFFERED=1", "TERM=xterm-256color")
 
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to create stdin pipe: %v", err)})
-		return
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to create stdout pipe: %v", err)})
-		return
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to create stderr pipe: %v", err)})
-		return
-	}
+	stdin, _ := cmd.StdinPipe()
+	stdout, _ := cmd.StdoutPipe()
+	stderr, _ := cmd.StderrPipe()
+
 	if err := cmd.Start(); err != nil {
 		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to start command: %v", err)})
 		return
@@ -774,8 +840,6 @@ func (ts *TerminalServer) handleIO(safeConn *SafeWebSocketConn, stdin io.WriteCl
 
 	go func() {
 		defer close(done)
-		// This defer is critical. It ensures that the channel for THIS execution
-		// is closed when the script finishes, allowing the stdin goroutine to unblock and exit.
 		defer close(inputChan)
 
 		err := cmd.Wait()
