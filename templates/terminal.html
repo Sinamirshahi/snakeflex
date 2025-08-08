@@ -584,6 +584,28 @@
         ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #484f58; }
     </style>
+<!-- CodeMirror core -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/codemirror.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/codemirror.min.js"></script>
+
+<!-- Theme (optional) -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/theme/material-darker.min.css">
+
+<!-- Modes -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/mode/python/python.min.js"></script>
+
+<!-- Addons -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/addon/edit/closebrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/addon/edit/matchbrackets.min.js"></script>
+<style>
+.CodeMirror {
+    height: 100%;
+    font-family: 'Consolas','Monaco','Courier New',monospace;
+    font-size: 14px;
+    background: #0d1117;
+    color: #c9d1d9;
+}
+</style>
 </head>
 <body>
     <div class="main-container">
@@ -709,7 +731,9 @@
         let currentEditingFile = null;
         let originalContent = '';
 
-        function initializeUI() {
+        
+        let cm = null; // CodeMirror instance
+function initializeUI() {
             if (!fileManagerEnabled) {
                 document.getElementById('sidebar')?.classList.add('hidden');
                 document.getElementById('headerTitle').textContent = 'Snakeflex V4.5 - Python Web Terminal (Secure Mode)';
@@ -824,12 +848,44 @@
                     document.getElementById('editorTextarea').value = result.data.content;
                     document.getElementById('editorModal').style.display = 'block';
                     
-                    // Focus the textarea after a short delay
-                    setTimeout(() => {
-                        document.getElementById('editorTextarea').focus();
-                    }, 100);
                     
-                } else {
+
+// Initialize or update CodeMirror
+const ta = document.getElementById('editorTextarea');
+const isPy = currentEditingFile.toLowerCase().endsWith('.py');
+if (!cm) {
+    cm = CodeMirror.fromTextArea(ta, {
+        mode: isPy ? 'python' : null,
+        theme: 'material-darker',
+        lineNumbers: true,
+        indentUnit: 4,
+        tabSize: 4,
+        indentWithTabs: false,
+        smartIndent: true,
+        matchBrackets: true,
+        autoCloseBrackets: true
+    });
+    cm.addKeyMap({
+        'Ctrl-S': () => saveFile(),
+        'Cmd-S':  () => saveFile(),
+        'Esc':    () => closeEditor()
+    });
+    cm.on('beforeChange', (instance, changeObj) => {
+        if (!currentEditingFile?.toLowerCase().endsWith('.py')) return;
+        if (changeObj.origin === '+input') {
+            const text = changeObj.text.map(line => line.replace(/\t/g, ' '.repeat(4)));
+            if (text.join('\n') !== changeObj.text.join('\n')) {
+                changeObj.update(changeObj.from, changeObj.to, text, changeObj.origin);
+            }
+        }
+    });
+} else {
+    cm.setValue(result.data.content);
+    cm.setOption('mode', isPy ? 'python' : null);
+    cm.setOption('indentWithTabs', isPy ? false : cm.getOption('indentWithTabs'));
+}
+setTimeout(() => cm.refresh() || cm.focus(), 50);
+} else {
                     addOutput(`❌ Failed to load file: ${result.message}`, 'stderr');
                 }
             } catch (error) {
@@ -840,7 +896,8 @@
         async function saveFile() {
             if (!currentEditingFile) return;
             
-            const content = document.getElementById('editorTextarea').value;
+            let content = (typeof cm !== 'undefined' && cm) ? cm.getValue() : document.getElementById('editorTextarea').value;
+            if (currentEditingFile && currentEditingFile.toLowerCase().endsWith('.py')) { content = content.replace(/\t/g, ' '.repeat(4)); }
             const statusEl = document.getElementById('editorStatus');
             
             try {
@@ -879,7 +936,7 @@
         }
 
         function closeEditor() {
-            const currentContent = document.getElementById('editorTextarea').value;
+            const currentContent = (typeof cm !== 'undefined' && cm) ? cm.getValue() : document.getElementById('editorTextarea').value;
             
             if (currentContent !== originalContent) {
                 if (!confirm('You have unsaved changes. Are you sure you want to close?')) {
