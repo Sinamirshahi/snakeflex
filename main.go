@@ -243,6 +243,7 @@ type TerminalServer struct {
 	authConfig         *AuthConfig
 	sessionManager     *SessionManager
 	rateLimiter        *RateLimiter
+	basePath           string // Added for proxy support
 }
 
 type Message struct {
@@ -368,6 +369,37 @@ func hashPassword(password string) string {
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 
+// Helper function to get base path from request headers or configuration
+func (ts *TerminalServer) getBasePath(r *http.Request) string {
+	// Check for forwarded path prefix (set by reverse proxy)
+	if prefix := r.Header.Get("X-Forwarded-Prefix"); prefix != "" {
+		return strings.TrimSuffix(prefix, "/")
+	}
+
+	// Check for script name (another common proxy header)
+	if script := r.Header.Get("X-Script-Name"); script != "" {
+		return strings.TrimSuffix(script, "/")
+	}
+
+	// Fall back to configured base path
+	return ts.basePath
+}
+
+// Helper function to construct URLs with base path
+func (ts *TerminalServer) buildURL(r *http.Request, path string) string {
+	basePath := ts.getBasePath(r)
+	if basePath == "" {
+		return path
+	}
+
+	// Ensure path starts with /
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+
+	return basePath + path
+}
+
 // Authentication middleware
 func (ts *TerminalServer) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -379,12 +411,13 @@ func (ts *TerminalServer) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 		// Check for session cookie
 		cookie, err := r.Cookie("snakeflex_session")
 		if err != nil || !ts.sessionManager.ValidateSession(cookie.Value) {
-			// Redirect to login page
-			if r.URL.Path == "/login" {
+			// Redirect to login page using relative path
+			if strings.HasSuffix(r.URL.Path, "/login") {
 				next(w, r)
 				return
 			}
-			http.Redirect(w, r, "/login", http.StatusFound)
+			loginURL := ts.buildURL(r, "/login")
+			http.Redirect(w, r, loginURL, http.StatusFound)
 			return
 		}
 
@@ -395,7 +428,8 @@ func (ts *TerminalServer) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 // Login handler
 func (ts *TerminalServer) loginHandler(w http.ResponseWriter, r *http.Request) {
 	if !ts.authConfig.Enabled {
-		http.Redirect(w, r, "/", http.StatusFound)
+		homeURL := ts.buildURL(r, "/")
+		http.Redirect(w, r, homeURL, http.StatusFound)
 		return
 	}
 
@@ -410,6 +444,12 @@ func (ts *TerminalServer) loginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ts *TerminalServer) serveLoginPage(w http.ResponseWriter, r *http.Request) {
+	basePath := ts.getBasePath(r)
+	baseHref := ""
+	if basePath != "" {
+		baseHref = fmt.Sprintf(`<base href="%s/">`, basePath)
+	}
+
 	loginHTML := `
 <!DOCTYPE html>
 <html lang="en">
@@ -417,6 +457,7 @@ func (ts *TerminalServer) serveLoginPage(w http.ResponseWriter, r *http.Request)
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Snakeflex - Authentication Required</title>
+    {{BASE_HREF}}
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -516,7 +557,7 @@ func (ts *TerminalServer) serveLoginPage(w http.ResponseWriter, r *http.Request)
         
         {{ERROR_MESSAGE}}
         
-        <form method="POST" action="/login">
+        <form method="POST" action="login">
             <div class="form-group">
                 <label class="form-label" for="password">Access Password:</label>
                 <input type="password" id="password" name="password" class="form-input" 
@@ -548,6 +589,7 @@ func (ts *TerminalServer) serveLoginPage(w http.ResponseWriter, r *http.Request)
 	}
 
 	loginHTML = strings.ReplaceAll(loginHTML, "{{ERROR_MESSAGE}}", errorMsg)
+	loginHTML = strings.ReplaceAll(loginHTML, "{{BASE_HREF}}", baseHref)
 
 	w.Header().Set("Content-Type", "text/html")
 	fmt.Fprint(w, loginHTML)
@@ -576,11 +618,18 @@ func (ts *TerminalServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 		// Create session
 		sessionToken := ts.sessionManager.CreateSession()
 
-		// Set secure session cookie
+		// Set secure session cookie with appropriate path
+		cookiePath := ts.getBasePath(r)
+		if cookiePath == "" {
+			cookiePath = "/"
+		} else {
+			cookiePath = cookiePath + "/"
+		}
+
 		cookie := &http.Cookie{
 			Name:     "snakeflex_session",
 			Value:    sessionToken,
-			Path:     "/",
+			Path:     cookiePath,
 			HttpOnly: true,
 			Secure:   r.TLS != nil, // Only secure if HTTPS
 			SameSite: http.SameSiteStrictMode,
@@ -593,7 +642,8 @@ func (ts *TerminalServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 			log.Printf("✅ Successful authentication from %s (IP: %s)", r.RemoteAddr, clientIP)
 		}
 
-		http.Redirect(w, r, "/", http.StatusFound)
+		homeURL := ts.buildURL(r, "/")
+		http.Redirect(w, r, homeURL, http.StatusFound)
 	} else {
 		// Failed login - record attempt and check for lockout
 		locked, lockDuration := ts.rateLimiter.RecordFailedAttempt(r)
@@ -609,12 +659,19 @@ func (ts *TerminalServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 			if ts.verbose {
 				log.Printf("❌ Failed authentication attempt from %s (IP: %s)", r.RemoteAddr, clientIP)
 			}
-			http.Redirect(w, r, "/login?error=1", http.StatusFound)
+			loginURL := ts.buildURL(r, "/login?error=1")
+			http.Redirect(w, r, loginURL, http.StatusFound)
 		}
 	}
 }
 
 func (ts *TerminalServer) serveBlockedPage(w http.ResponseWriter, r *http.Request, remainingTime time.Duration) {
+	basePath := ts.getBasePath(r)
+	baseHref := ""
+	if basePath != "" {
+		baseHref = fmt.Sprintf(`<base href="%s/">`, basePath)
+	}
+
 	blockedHTML := `
 <!DOCTYPE html>
 <html lang="en">
@@ -622,6 +679,7 @@ func (ts *TerminalServer) serveBlockedPage(w http.ResponseWriter, r *http.Reques
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Snakeflex - Access Temporarily Blocked</title>
+    {{BASE_HREF}}
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -721,7 +779,7 @@ func (ts *TerminalServer) serveBlockedPage(w http.ResponseWriter, r *http.Reques
             Please wait for the cooldown period to expire before trying again.
         </div>
         
-        <button class="back-btn" onclick="window.location.href='/login'">
+        <button class="back-btn" onclick="window.location.href='login'">
             ← Back to Login
         </button>
     </div>
@@ -739,7 +797,7 @@ func (ts *TerminalServer) serveBlockedPage(w http.ResponseWriter, r *http.Reques
             document.getElementById('timeLeft').textContent = timeString;
             
             if (remainingSeconds <= 0) {
-                window.location.href = '/login';
+                window.location.href = 'login';
                 return;
             }
             
@@ -752,7 +810,7 @@ func (ts *TerminalServer) serveBlockedPage(w http.ResponseWriter, r *http.Reques
         // Auto-redirect when time expires
         setTimeout(() => {
             clearInterval(interval);
-            window.location.href = '/login';
+            window.location.href = 'login';
         }, (remainingSeconds + 1) * 1000);
     </script>
 </body>
@@ -763,6 +821,7 @@ func (ts *TerminalServer) serveBlockedPage(w http.ResponseWriter, r *http.Reques
 
 	blockedHTML = strings.ReplaceAll(blockedHTML, "{{REMAINING_TIME}}", remainingTimeStr.String())
 	blockedHTML = strings.ReplaceAll(blockedHTML, "{{REMAINING_SECONDS}}", fmt.Sprintf("%d", remainingSeconds))
+	blockedHTML = strings.ReplaceAll(blockedHTML, "{{BASE_HREF}}", baseHref)
 
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusTooManyRequests) // 429 status code
@@ -771,17 +830,25 @@ func (ts *TerminalServer) serveBlockedPage(w http.ResponseWriter, r *http.Reques
 
 // Logout handler
 func (ts *TerminalServer) logoutHandler(w http.ResponseWriter, r *http.Request) {
-	// Clear session cookie
+	// Clear session cookie with appropriate path
+	cookiePath := ts.getBasePath(r)
+	if cookiePath == "" {
+		cookiePath = "/"
+	} else {
+		cookiePath = cookiePath + "/"
+	}
+
 	cookie := &http.Cookie{
 		Name:     "snakeflex_session",
 		Value:    "",
-		Path:     "/",
+		Path:     cookiePath,
 		HttpOnly: true,
 		Expires:  time.Unix(0, 0),
 	}
 	http.SetCookie(w, cookie)
 
-	http.Redirect(w, r, "/login", http.StatusFound)
+	loginURL := ts.buildURL(r, "/login")
+	http.Redirect(w, r, loginURL, http.StatusFound)
 }
 
 // Enhanced getDirectoryTree with navigation support
@@ -909,6 +976,7 @@ func main() {
 	disableFileManager := flag.Bool("disable-file-manager", false, "Disable file management features for security")
 	disableShell := flag.Bool("disable-shell", false, "Disable the interactive shell feature")
 	password := flag.String("pass", "", "Set password for authentication (optional)")
+	basePath := flag.String("base-path", "", "Base path when served behind reverse proxy (e.g., /snakeflex)")
 	flag.Parse()
 
 	workingDir, err := os.Getwd()
@@ -946,6 +1014,12 @@ func main() {
 		fmt.Printf("🔒 Password authentication enabled\n")
 	}
 
+	// Clean and validate base path
+	cleanBasePath := strings.TrimSuffix(*basePath, "/")
+	if cleanBasePath != "" && !strings.HasPrefix(cleanBasePath, "/") {
+		cleanBasePath = "/" + cleanBasePath
+	}
+
 	server := &TerminalServer{
 		pythonFile:         *pythonFile,
 		verbose:            *verbose,
@@ -956,6 +1030,7 @@ func main() {
 		authConfig:         authConfig,
 		sessionManager:     NewSessionManager(),
 		rateLimiter:        NewRateLimiter(),
+		basePath:           cleanBasePath,
 	}
 
 	// Setup routes with authentication
@@ -981,6 +1056,9 @@ func main() {
 
 	serverPort := ":" + *port
 	fmt.Printf("🐍 Python Web Terminal started at http://localhost%s\n", serverPort)
+	if cleanBasePath != "" {
+		fmt.Printf("🔗 Base path configured: %s (for reverse proxy support)\n", cleanBasePath)
+	}
 	fmt.Printf("📁 Working Directory: %s\n", workingDir)
 	if *pythonFile != "" {
 		fmt.Printf("🚀 Initial script: %s\n", *pythonFile)
@@ -1003,7 +1081,11 @@ func main() {
 	}
 
 	if authConfig.Enabled {
-		fmt.Printf("🔐 Access the terminal at: http://localhost%s/login\n", serverPort)
+		if cleanBasePath != "" {
+			fmt.Printf("🔐 Access the terminal at: http://localhost%s%s/login\n", serverPort, cleanBasePath)
+		} else {
+			fmt.Printf("🔐 Access the terminal at: http://localhost%s/login\n", serverPort)
+		}
 		fmt.Printf("🛡️ Rate limiting enabled: 3+ failed attempts = 1min lockout\n")
 	}
 
@@ -1095,6 +1177,10 @@ func (ts *TerminalServer) terminalHandler(w http.ResponseWriter, r *http.Request
 	htmlStr = strings.ReplaceAll(htmlStr, "{{WORKING_DIR}}", ts.workingDir)
 	htmlStr = strings.ReplaceAll(htmlStr, "{{FILE_MANAGER_ENABLED}}", fmt.Sprintf("%t", ts.fileManagerEnabled))
 	htmlStr = strings.ReplaceAll(htmlStr, "{{SHELL_ENABLED}}", fmt.Sprintf("%t", ts.shellEnabled))
+
+	// Add base path to template
+	basePath := ts.getBasePath(r)
+	htmlStr = strings.ReplaceAll(htmlStr, "{{BASE_PATH}}", basePath)
 
 	if isEmbedded {
 		htmlStr = strings.ReplaceAll(htmlStr, `id="embeddedNotice" style="display: none;"`, `id="embeddedNotice"`)
