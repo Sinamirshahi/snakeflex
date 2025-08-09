@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -37,6 +38,134 @@ var upgrader = websocket.Upgrader{
 type AuthConfig struct {
 	Password string
 	Enabled  bool
+}
+
+// Rate limiting for failed authentication attempts
+type RateLimiter struct {
+	attempts map[string]*AttemptRecord
+	mutex    sync.RWMutex
+}
+
+type AttemptRecord struct {
+	Count       int
+	LastAttempt time.Time
+	LockedUntil time.Time
+}
+
+func NewRateLimiter() *RateLimiter {
+	rl := &RateLimiter{
+		attempts: make(map[string]*AttemptRecord),
+	}
+
+	// Clean up old records every 10 minutes
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			rl.CleanupOldRecords()
+		}
+	}()
+
+	return rl
+}
+
+func (rl *RateLimiter) getClientIP(r *http.Request) string {
+	// Check for forwarded IP first (if behind proxy)
+	forwarded := r.Header.Get("X-Forwarded-For")
+	if forwarded != "" {
+		return strings.Split(forwarded, ",")[0]
+	}
+
+	// Check for real IP header
+	realIP := r.Header.Get("X-Real-IP")
+	if realIP != "" {
+		return realIP
+	}
+
+	// Fall back to remote address
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return ip
+}
+
+func (rl *RateLimiter) IsBlocked(r *http.Request) (bool, time.Duration) {
+	rl.mutex.RLock()
+	defer rl.mutex.RUnlock()
+
+	clientIP := rl.getClientIP(r)
+	record, exists := rl.attempts[clientIP]
+
+	if !exists {
+		return false, 0
+	}
+
+	now := time.Now()
+	if now.Before(record.LockedUntil) {
+		return true, record.LockedUntil.Sub(now)
+	}
+
+	return false, 0
+}
+
+func (rl *RateLimiter) RecordFailedAttempt(r *http.Request) (bool, time.Duration) {
+	rl.mutex.Lock()
+	defer rl.mutex.Unlock()
+
+	clientIP := rl.getClientIP(r)
+	now := time.Now()
+
+	record, exists := rl.attempts[clientIP]
+	if !exists {
+		record = &AttemptRecord{}
+		rl.attempts[clientIP] = record
+	}
+
+	// Reset counter if last attempt was more than 15 minutes ago
+	if now.Sub(record.LastAttempt) > 15*time.Minute {
+		record.Count = 0
+	}
+
+	record.Count++
+	record.LastAttempt = now
+
+	// Progressive lockout durations
+	var lockDuration time.Duration
+	switch {
+	case record.Count >= 10: // 10+ attempts = 1 hour
+		lockDuration = time.Hour
+	case record.Count >= 6: // 6-9 attempts = 10 minutes
+		lockDuration = 10 * time.Minute
+	case record.Count >= 3: // 3-5 attempts = 1 minute
+		lockDuration = time.Minute
+	default:
+		return false, 0 // No lockout yet
+	}
+
+	record.LockedUntil = now.Add(lockDuration)
+	return true, lockDuration
+}
+
+func (rl *RateLimiter) RecordSuccessfulLogin(r *http.Request) {
+	rl.mutex.Lock()
+	defer rl.mutex.Unlock()
+
+	clientIP := rl.getClientIP(r)
+	delete(rl.attempts, clientIP) // Clear failed attempts on successful login
+}
+
+func (rl *RateLimiter) CleanupOldRecords() {
+	rl.mutex.Lock()
+	defer rl.mutex.Unlock()
+
+	now := time.Now()
+	for ip, record := range rl.attempts {
+		// Remove records older than 1 hour and not currently locked
+		if now.Sub(record.LastAttempt) > time.Hour && now.After(record.LockedUntil) {
+			delete(rl.attempts, ip)
+		}
+	}
 }
 
 type SessionManager struct {
@@ -113,6 +242,7 @@ type TerminalServer struct {
 	shellEnabled       bool
 	authConfig         *AuthConfig
 	sessionManager     *SessionManager
+	rateLimiter        *RateLimiter
 }
 
 type Message struct {
@@ -424,12 +554,25 @@ func (ts *TerminalServer) serveLoginPage(w http.ResponseWriter, r *http.Request)
 }
 
 func (ts *TerminalServer) handleLogin(w http.ResponseWriter, r *http.Request) {
-	password := r.FormValue("password")
+	// Check if client is currently blocked
+	if blocked, remainingTime := ts.rateLimiter.IsBlocked(r); blocked {
+		if ts.verbose {
+			clientIP := ts.rateLimiter.getClientIP(r)
+			log.Printf("🚫 Blocked authentication attempt from %s (IP: %s), %v remaining",
+				r.RemoteAddr, clientIP, remainingTime.Round(time.Second))
+		}
 
-	// Hash the provided password and compare
+		ts.serveBlockedPage(w, r, remainingTime)
+		return
+	}
+
+	password := r.FormValue("password")
 	hashedPassword := hashPassword(password)
 
 	if hashedPassword == ts.authConfig.Password {
+		// Successful login - clear any failed attempts
+		ts.rateLimiter.RecordSuccessfulLogin(r)
+
 		// Create session
 		sessionToken := ts.sessionManager.CreateSession()
 
@@ -446,16 +589,184 @@ func (ts *TerminalServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, cookie)
 
 		if ts.verbose {
-			log.Printf("✅ Successful authentication from %s", r.RemoteAddr)
+			clientIP := ts.rateLimiter.getClientIP(r)
+			log.Printf("✅ Successful authentication from %s (IP: %s)", r.RemoteAddr, clientIP)
 		}
 
 		http.Redirect(w, r, "/", http.StatusFound)
 	} else {
-		if ts.verbose {
-			log.Printf("❌ Failed authentication attempt from %s", r.RemoteAddr)
+		// Failed login - record attempt and check for lockout
+		locked, lockDuration := ts.rateLimiter.RecordFailedAttempt(r)
+
+		clientIP := ts.rateLimiter.getClientIP(r)
+		if locked {
+			if ts.verbose {
+				log.Printf("🔒 IP %s locked for %v after failed authentication from %s",
+					clientIP, lockDuration.Round(time.Second), r.RemoteAddr)
+			}
+			ts.serveBlockedPage(w, r, lockDuration)
+		} else {
+			if ts.verbose {
+				log.Printf("❌ Failed authentication attempt from %s (IP: %s)", r.RemoteAddr, clientIP)
+			}
+			http.Redirect(w, r, "/login?error=1", http.StatusFound)
 		}
-		http.Redirect(w, r, "/login?error=1", http.StatusFound)
 	}
+}
+
+func (ts *TerminalServer) serveBlockedPage(w http.ResponseWriter, r *http.Request, remainingTime time.Duration) {
+	blockedHTML := `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snakeflex - Access Temporarily Blocked</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            background: linear-gradient(135deg, #0d1117 0%, #161b22 100%); 
+            color: #c9d1d9; 
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace; 
+            height: 100vh; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+        }
+        .blocked-container {
+            background: #21262d;
+            border: 2px solid #da3633;
+            border-radius: 8px;
+            padding: 40px;
+            box-shadow: 0 8px 32px rgba(218, 54, 51, 0.3);
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+            animation: shake 0.5s ease-in-out;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        .blocked-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            color: #da3633;
+        }
+        .blocked-title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #da3633;
+        }
+        .blocked-message {
+            font-size: 16px;
+            line-height: 1.6;
+            margin-bottom: 20px;
+            color: #c9d1d9;
+        }
+        .countdown {
+            background: #da3633;
+            color: white;
+            padding: 15px;
+            border-radius: 6px;
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        .security-info {
+            background: rgba(255, 215, 0, 0.1);
+            border: 1px solid #ffd700;
+            border-radius: 6px;
+            padding: 15px;
+            font-size: 14px;
+            color: #ffd700;
+            line-height: 1.5;
+        }
+        .back-btn {
+            margin-top: 20px;
+            background: #6e7681;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .back-btn:hover {
+            background: #7d8590;
+        }
+    </style>
+</head>
+<body>
+    <div class="blocked-container">
+        <div class="blocked-icon">🔒</div>
+        <h1 class="blocked-title">Access Temporarily Blocked</h1>
+        
+        <div class="blocked-message">
+            Too many failed authentication attempts have been detected from your IP address.
+            Access has been temporarily restricted for security purposes.
+        </div>
+        
+        <div class="countdown" id="countdown">
+            Time remaining: <span id="timeLeft">{{REMAINING_TIME}}</span>
+        </div>
+        
+        <div class="security-info">
+            🛡️ <strong>Security Notice:</strong><br>
+            This measure protects against automated attacks and unauthorized access attempts.
+            Please wait for the cooldown period to expire before trying again.
+        </div>
+        
+        <button class="back-btn" onclick="window.location.href='/login'">
+            ← Back to Login
+        </button>
+    </div>
+    
+    <script>
+        let remainingSeconds = {{REMAINING_SECONDS}};
+        
+        function updateCountdown() {
+            const minutes = Math.floor(remainingSeconds / 60);
+            const seconds = remainingSeconds % 60;
+            const timeString = minutes > 0 
+                ? minutes + 'm ' + seconds.toString().padStart(2, '0') + 's'
+                : seconds + 's';
+            
+            document.getElementById('timeLeft').textContent = timeString;
+            
+            if (remainingSeconds <= 0) {
+                window.location.href = '/login';
+                return;
+            }
+            
+            remainingSeconds--;
+        }
+        
+        updateCountdown();
+        const interval = setInterval(updateCountdown, 1000);
+        
+        // Auto-redirect when time expires
+        setTimeout(() => {
+            clearInterval(interval);
+            window.location.href = '/login';
+        }, (remainingSeconds + 1) * 1000);
+    </script>
+</body>
+</html>`
+
+	remainingSeconds := int(remainingTime.Seconds())
+	remainingTimeStr := time.Duration(remainingSeconds) * time.Second
+
+	blockedHTML = strings.ReplaceAll(blockedHTML, "{{REMAINING_TIME}}", remainingTimeStr.String())
+	blockedHTML = strings.ReplaceAll(blockedHTML, "{{REMAINING_SECONDS}}", fmt.Sprintf("%d", remainingSeconds))
+
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(http.StatusTooManyRequests) // 429 status code
+	fmt.Fprint(w, blockedHTML)
 }
 
 // Logout handler
@@ -644,6 +955,7 @@ func main() {
 		shellEnabled:       !*disableShell,
 		authConfig:         authConfig,
 		sessionManager:     NewSessionManager(),
+		rateLimiter:        NewRateLimiter(),
 	}
 
 	// Setup routes with authentication
@@ -692,6 +1004,7 @@ func main() {
 
 	if authConfig.Enabled {
 		fmt.Printf("🔐 Access the terminal at: http://localhost%s/login\n", serverPort)
+		fmt.Printf("🛡️ Rate limiting enabled: 3+ failed attempts = 1min lockout\n")
 	}
 
 	if err := http.ListenAndServe(serverPort, nil); err != nil {
