@@ -412,11 +412,15 @@ func (ts *TerminalServer) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 		cookie, err := r.Cookie("snakeflex_session")
 		if err != nil || !ts.sessionManager.ValidateSession(cookie.Value) {
 			// Redirect to login page using relative path
-			if strings.HasSuffix(r.URL.Path, "/login") {
+			// Construct the path correctly based on whether we are already at the login page
+			currentRequestPath := r.URL.Path
+			loginPathSuffix := "/login"
+			if strings.HasSuffix(currentRequestPath, loginPathSuffix) {
 				next(w, r)
 				return
 			}
-			loginURL := ts.buildURL(r, "/login")
+
+			loginURL := ts.buildURL(r, loginPathSuffix)
 			http.Redirect(w, r, loginURL, http.StatusFound)
 			return
 		}
@@ -447,7 +451,8 @@ func (ts *TerminalServer) serveLoginPage(w http.ResponseWriter, r *http.Request)
 	basePath := ts.getBasePath(r)
 	baseHref := ""
 	if basePath != "" {
-		baseHref = fmt.Sprintf(`<base href="%s/">`, basePath)
+		// The base href should end with a slash for relative paths to work correctly.
+		baseHref = fmt.Sprintf(`<base href="%s/">`, strings.TrimSuffix(basePath, "/"))
 	}
 
 	loginHTML := `
@@ -623,7 +628,8 @@ func (ts *TerminalServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 		if cookiePath == "" {
 			cookiePath = "/"
 		} else {
-			cookiePath = cookiePath + "/"
+			// Ensure cookie path ends with / for proper subdirectory handling
+			cookiePath = strings.TrimSuffix(cookiePath, "/") + "/"
 		}
 
 		cookie := &http.Cookie{
@@ -669,7 +675,7 @@ func (ts *TerminalServer) serveBlockedPage(w http.ResponseWriter, r *http.Reques
 	basePath := ts.getBasePath(r)
 	baseHref := ""
 	if basePath != "" {
-		baseHref = fmt.Sprintf(`<base href="%s/">`, basePath)
+		baseHref = fmt.Sprintf(`<base href="%s/">`, strings.TrimSuffix(basePath, "/"))
 	}
 
 	blockedHTML := `
@@ -835,7 +841,8 @@ func (ts *TerminalServer) logoutHandler(w http.ResponseWriter, r *http.Request) 
 	if cookiePath == "" {
 		cookiePath = "/"
 	} else {
-		cookiePath = cookiePath + "/"
+		// Ensure cookie path ends with / for proper subdirectory handling
+		cookiePath = strings.TrimSuffix(cookiePath, "/") + "/"
 	}
 
 	cookie := &http.Cookie{
@@ -1033,31 +1040,42 @@ func main() {
 		basePath:           cleanBasePath,
 	}
 
-	// Setup routes with authentication
-	http.HandleFunc("/login", server.loginHandler)
-	http.HandleFunc("/logout", server.logoutHandler)
-	http.HandleFunc("/", server.requireAuth(func(w http.ResponseWriter, r *http.Request) {
-		server.terminalHandler(w, r, *htmlFile)
-	}))
-	http.HandleFunc("/ws", server.requireAuth(server.websocketHandler))
+	// Setup routes with authentication and the base path prefix
+	http.HandleFunc(cleanBasePath+"/login", server.loginHandler)
+	http.HandleFunc(cleanBasePath+"/logout", server.logoutHandler)
+	http.HandleFunc(cleanBasePath+"/ws", server.requireAuth(server.websocketHandler))
 
 	if server.shellEnabled {
-		http.HandleFunc("/ws-shell", server.requireAuth(server.shellWebsocketHandler))
+		http.HandleFunc(cleanBasePath+"/ws-shell", server.requireAuth(server.shellWebsocketHandler))
 	}
 
 	if server.fileManagerEnabled {
-		http.HandleFunc("/api/files", server.requireAuth(server.filesHandler))
-		http.HandleFunc("/api/files/content", server.requireAuth(server.fileContentHandler))
-		http.HandleFunc("/api/files/download", server.requireAuth(server.downloadHandler))
-		http.HandleFunc("/api/files/upload", server.requireAuth(server.uploadHandler))
-		http.HandleFunc("/api/files/create", server.requireAuth(server.createHandler))
-		http.HandleFunc("/api/files/delete", server.requireAuth(server.deleteHandler))
+		http.HandleFunc(cleanBasePath+"/api/files", server.requireAuth(server.filesHandler))
+		http.HandleFunc(cleanBasePath+"/api/files/content", server.requireAuth(server.fileContentHandler))
+		http.HandleFunc(cleanBasePath+"/api/files/download", server.requireAuth(server.downloadHandler))
+		http.HandleFunc(cleanBasePath+"/api/files/upload", server.requireAuth(server.uploadHandler))
+		http.HandleFunc(cleanBasePath+"/api/files/create", server.requireAuth(server.createHandler))
+		http.HandleFunc(cleanBasePath+"/api/files/delete", server.requireAuth(server.deleteHandler))
 	}
 
+	// The root handler must be last to avoid capturing other routes.
+	// The trailing slash is important for matching the base path itself and any subpaths.
+	http.HandleFunc(cleanBasePath+"/", server.requireAuth(func(w http.ResponseWriter, r *http.Request) {
+		// If the path is exactly the base path without a trailing slash, redirect to add it.
+		// This helps relative paths in the HTML work correctly.
+		if r.URL.Path == cleanBasePath {
+			http.Redirect(w, r, cleanBasePath+"/", http.StatusMovedPermanently)
+			return
+		}
+		server.terminalHandler(w, r, *htmlFile)
+	}))
+
 	serverPort := ":" + *port
-	fmt.Printf("🐍 Python Web Terminal started at http://localhost%s\n", serverPort)
 	if cleanBasePath != "" {
-		fmt.Printf("🔗 Base path configured: %s (for reverse proxy support)\n", cleanBasePath)
+		fmt.Printf("🐍 Python Web Terminal started at http://localhost%s%s/\n", serverPort, cleanBasePath)
+		fmt.Printf("🔗 Base path configured: %s\n", cleanBasePath)
+	} else {
+		fmt.Printf("🐍 Python Web Terminal started at http://localhost%s/\n", serverPort)
 	}
 	fmt.Printf("📁 Working Directory: %s\n", workingDir)
 	if *pythonFile != "" {
@@ -1075,17 +1093,13 @@ func main() {
 	}
 
 	if server.shellEnabled {
-		fmt.Println("⌨️ Interactive shell enabled at /ws-shell")
+		fmt.Println("⌨️ Interactive shell enabled")
 	} else {
 		fmt.Println("🔒 Interactive shell has been disabled via command-line flag.")
 	}
 
 	if authConfig.Enabled {
-		if cleanBasePath != "" {
-			fmt.Printf("🔐 Access the terminal at: http://localhost%s%s/login\n", serverPort, cleanBasePath)
-		} else {
-			fmt.Printf("🔐 Access the terminal at: http://localhost%s/login\n", serverPort)
-		}
+		fmt.Printf("🔐 Access the terminal at: http://localhost%s%s/login\n", serverPort, cleanBasePath)
 		fmt.Printf("🛡️ Rate limiting enabled: 3+ failed attempts = 1min lockout\n")
 	}
 
@@ -1349,7 +1363,7 @@ func (ts *TerminalServer) uploadHandler(w http.ResponseWriter, r *http.Request) 
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Method not allowed"})
 		return
 	}
-	err := r.ParseMultipartForm(500 << 20)
+	err := r.ParseMultipartForm(500 << 20) // 500 MB max memory
 	if err != nil {
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "Failed to parse form: " + err.Error()})
 		return
@@ -1398,7 +1412,7 @@ func (ts *TerminalServer) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	displayPath := uploadPath
-	if uploadPath == "." {
+	if uploadPath == "." || uploadPath == "" {
 		displayPath = "root directory"
 	}
 
@@ -1508,7 +1522,7 @@ func (ts *TerminalServer) websocketHandler(w http.ResponseWriter, r *http.Reques
 		var msg Message
 		err := safeConn.ReadJSON(&msg)
 		if err != nil {
-			if ts.verbose {
+			if ts.verbose && !websocket.IsCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
 				log.Printf("WebSocket read error: %v", err)
 			}
 			break
@@ -1530,7 +1544,12 @@ func (ts *TerminalServer) websocketHandler(w http.ResponseWriter, r *http.Reques
 				if ts.verbose {
 					log.Printf("Received input: %s", msg.Input)
 				}
-				targetChan <- msg.Input + "\n"
+				// Use a select with a default case to avoid blocking if the channel is full.
+				select {
+				case targetChan <- msg.Input + "\n":
+				default:
+					log.Printf("Input channel full, dropping input for file: %s", msg.File)
+				}
 			}
 		}
 	}
@@ -1557,18 +1576,20 @@ func (ts *TerminalServer) executePythonScript(safeConn *SafeWebSocketConn, input
 		return
 	}
 
-	if runtime.GOOS == "windows" {
-		ts.executeWindowsScript(safeConn, inputChan, absPath)
+	cmd := exec.Command(ts.pythonCmd, "-u", absPath)
+	cmd.Dir = ts.workingDir
+	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, "PYTHONIOENCODING=utf-8", "PYTHONUNBUFFERED=1")
+
+	// Use PTY on Unix-like systems for better interactive session handling
+	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
+		ts.executePtyScript(safeConn, inputChan, cmd)
 	} else {
-		ts.executeUnixScript(safeConn, inputChan, absPath)
+		ts.executePipeScript(safeConn, inputChan, cmd)
 	}
 }
 
-func (ts *TerminalServer) executeWindowsScript(safeConn *SafeWebSocketConn, inputChan chan string, scriptPath string) {
-	cmd := exec.Command(ts.pythonCmd, "-u", scriptPath)
-	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, "PYTHONIOENCODING=utf-8", "PYTHONUNBUFFERED=1", "PYTHONUTF8=1")
-
+func (ts *TerminalServer) executePipeScript(safeConn *SafeWebSocketConn, inputChan chan string, cmd *exec.Cmd) {
 	stdin, _ := cmd.StdinPipe()
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()
@@ -1579,70 +1600,25 @@ func (ts *TerminalServer) executeWindowsScript(safeConn *SafeWebSocketConn, inpu
 	ts.handleIO(safeConn, stdin, stdout, stderr, cmd, inputChan)
 }
 
-func (ts *TerminalServer) executeUnixScript(safeConn *SafeWebSocketConn, inputChan chan string, scriptPath string) {
-	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
-		ts.executePTYScript(safeConn, inputChan, scriptPath)
-	} else {
-		ts.executeWindowsScript(safeConn, inputChan, scriptPath)
-	}
-}
-
-func (ts *TerminalServer) executePTYScript(safeConn *SafeWebSocketConn, inputChan chan string, scriptPath string) {
-	cmd := exec.Command(ts.pythonCmd, "-u", scriptPath)
-	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, "PYTHONIOENCODING=utf-8", "PYTHONUNBUFFERED=1", "TERM=xterm-256color")
-
-	stdin, _ := cmd.StdinPipe()
-	stdout, _ := cmd.StdoutPipe()
-	stderr, _ := cmd.StderrPipe()
-
-	if err := cmd.Start(); err != nil {
-		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to start command: %v", err)})
+func (ts *TerminalServer) executePtyScript(safeConn *SafeWebSocketConn, inputChan chan string, cmd *exec.Cmd) {
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		safeConn.SendMessage(Message{Type: "error", Content: fmt.Sprintf("Failed to start PTY: %v", err)})
 		return
 	}
-	ts.handleIO(safeConn, stdin, stdout, stderr, cmd, inputChan)
+	defer ptmx.Close()
+
+	// We handle IO using the single PTY file descriptor
+	ts.handleIO(safeConn, ptmx, ptmx, nil, cmd, inputChan)
 }
 
 func (ts *TerminalServer) handleIO(safeConn *SafeWebSocketConn, stdin io.WriteCloser, stdout, stderr io.ReadCloser, cmd *exec.Cmd, inputChan chan string) {
-	done := make(chan bool)
-	go func() {
-		defer stdin.Close()
-		for input := range inputChan {
-			if ts.verbose {
-				log.Printf("Sending input to Python: %s", strings.TrimSpace(input))
-			}
-			io.WriteString(stdin, input)
-		}
-	}()
+	wg := sync.WaitGroup{}
 
+	// Goroutine to handle process exit
+	wg.Add(1)
 	go func() {
-		buffer := make([]byte, 1024)
-		for {
-			n, err := stdout.Read(buffer)
-			if n > 0 {
-				safeConn.SendMessage(Message{Type: "stdout", Content: string(buffer[:n])})
-			}
-			if err != nil {
-				break
-			}
-		}
-	}()
-
-	go func() {
-		buffer := make([]byte, 1024)
-		for {
-			n, err := stderr.Read(buffer)
-			if n > 0 {
-				safeConn.SendMessage(Message{Type: "stderr", Content: string(buffer[:n])})
-			}
-			if err != nil {
-				break
-			}
-		}
-	}()
-
-	go func() {
-		defer close(done)
+		defer wg.Done()
 		defer close(inputChan)
 
 		err := cmd.Wait()
@@ -1651,7 +1627,7 @@ func (ts *TerminalServer) handleIO(safeConn *SafeWebSocketConn, stdin io.WriteCl
 			if exitError, ok := err.(*exec.ExitError); ok {
 				exitCode = exitError.ExitCode()
 			} else {
-				exitCode = -1
+				exitCode = -1 // Indicates an error other than a non-zero exit code
 			}
 		}
 		safeConn.SendMessage(Message{Type: "completed", Content: fmt.Sprintf("Exit code: %d", exitCode)})
@@ -1660,5 +1636,58 @@ func (ts *TerminalServer) handleIO(safeConn *SafeWebSocketConn, stdin io.WriteCl
 		}
 	}()
 
-	<-done
+	// Goroutine for writing input to the process
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer stdin.Close()
+		for input := range inputChan {
+			if ts.verbose {
+				log.Printf("Sending input to Python: %s", strings.TrimSpace(input))
+			}
+			_, err := io.WriteString(stdin, input)
+			if err != nil {
+				if ts.verbose {
+					log.Printf("Error writing to stdin: %v", err)
+				}
+				return
+			}
+		}
+	}()
+
+	// Goroutine for reading from stdout
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		buffer := make([]byte, 4096)
+		for {
+			n, err := stdout.Read(buffer)
+			if n > 0 {
+				safeConn.SendMessage(Message{Type: "stdout", Content: string(buffer[:n])})
+			}
+			if err != nil {
+				break // Usually io.EOF
+			}
+		}
+	}()
+
+	// Goroutine for reading from stderr (only if it's a separate pipe)
+	if stderr != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			buffer := make([]byte, 4096)
+			for {
+				n, err := stderr.Read(buffer)
+				if n > 0 {
+					safeConn.SendMessage(Message{Type: "stderr", Content: string(buffer[:n])})
+				}
+				if err != nil {
+					break // Usually io.EOF
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
 }
