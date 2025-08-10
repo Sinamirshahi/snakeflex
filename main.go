@@ -1116,6 +1116,29 @@ func (ts *TerminalServer) shellWebsocketHandler(w http.ResponseWriter, r *http.R
 	}
 	defer conn.Close()
 
+	// Set ping/pong handlers for shell connection
+	conn.SetPingHandler(func(appData string) error {
+		if ts.verbose {
+			log.Printf("Shell received ping from client: %s", r.RemoteAddr)
+		}
+		conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(10*time.Second))
+		return nil
+	})
+
+	conn.SetPongHandler(func(appData string) error {
+		if ts.verbose {
+			log.Printf("Shell received pong from client: %s", r.RemoteAddr)
+		}
+		return nil
+	})
+
+	// Set read deadline
+	conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	conn.SetPongHandler(func(string) error {
+		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		return nil
+	})
+
 	var shellCmd string
 	if runtime.GOOS == "windows" {
 		shellCmd = "powershell.exe"
@@ -1134,6 +1157,24 @@ func (ts *TerminalServer) shellWebsocketHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 	defer ptmx.Close()
+
+	// Start ping routine for shell
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(10*time.Second)); err != nil {
+					if ts.verbose {
+						log.Printf("Shell ping failed for %s: %v", r.RemoteAddr, err)
+					}
+					return
+				}
+			}
+		}
+	}()
 
 	go func() {
 		defer conn.Close()
@@ -1164,6 +1205,15 @@ func (ts *TerminalServer) shellWebsocketHandler(w http.ResponseWriter, r *http.R
 		var msg ShellMessage
 		if err := json.Unmarshal(message, &msg); err == nil {
 			switch msg.Type {
+			case "ping":
+				response := map[string]string{"type": "pong"}
+				if respData, err := json.Marshal(response); err == nil {
+					conn.WriteMessage(websocket.TextMessage, respData)
+				}
+				continue
+			case "pong":
+				// Client responded to our ping
+				continue
 			case "resize":
 				if ts.verbose {
 					log.Printf("Resizing PTY to %v rows and %v cols", msg.Rows, msg.Cols)
@@ -1503,11 +1553,36 @@ func (ts *TerminalServer) deleteHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (ts *TerminalServer) websocketHandler(w http.ResponseWriter, r *http.Request) {
+	// Set ping/pong handlers before upgrading
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("WebSocket upgrade error: %v", err)
 		return
 	}
+
+	// Set ping/pong handlers
+	conn.SetPingHandler(func(appData string) error {
+		if ts.verbose {
+			log.Printf("Received ping from client: %s", r.RemoteAddr)
+		}
+		conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(10*time.Second))
+		return nil
+	})
+
+	conn.SetPongHandler(func(appData string) error {
+		if ts.verbose {
+			log.Printf("Received pong from client: %s", r.RemoteAddr)
+		}
+		return nil
+	})
+
+	// Set read deadline for ping/pong mechanism
+	conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	conn.SetPongHandler(func(string) error {
+		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		return nil
+	})
+
 	safeConn := NewSafeWebSocketConn(conn)
 	defer safeConn.Close()
 
@@ -1518,24 +1593,50 @@ func (ts *TerminalServer) websocketHandler(w http.ResponseWriter, r *http.Reques
 	var currentInputChan chan string
 	var chanMutex sync.Mutex
 
+	// Start ping routine
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(10*time.Second)); err != nil {
+					if ts.verbose {
+						log.Printf("Ping failed for %s: %v", r.RemoteAddr, err)
+					}
+					return
+				}
+			}
+		}
+	}()
+
 	for {
 		var msg Message
 		err := safeConn.ReadJSON(&msg)
 		if err != nil {
-			if ts.verbose && !websocket.IsCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
-				log.Printf("WebSocket read error: %v", err)
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
+				if ts.verbose {
+					log.Printf("WebSocket read error: %v", err)
+				}
 			}
 			break
 		}
 
+		// Handle ping/pong messages
 		switch msg.Type {
+		case "ping":
+			safeConn.SendMessage(Message{Type: "pong"})
+			continue
+		case "pong":
+			// Client responded to our ping
+			continue
 		case "execute":
 			newChan := make(chan string, 10)
 			chanMutex.Lock()
 			currentInputChan = newChan
 			chanMutex.Unlock()
 			go ts.executePythonScript(safeConn, newChan, msg.File)
-
 		case "input":
 			chanMutex.Lock()
 			targetChan := currentInputChan
@@ -1544,7 +1645,6 @@ func (ts *TerminalServer) websocketHandler(w http.ResponseWriter, r *http.Reques
 				if ts.verbose {
 					log.Printf("Received input: %s", msg.Input)
 				}
-				// Use a select with a default case to avoid blocking if the channel is full.
 				select {
 				case targetChan <- msg.Input + "\n":
 				default:
