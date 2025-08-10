@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Snakeflex V1.75 - Python Web Terminal</title>
+    <title>Snakeflex V1.6 - Python Web Terminal</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/theme/material-darker.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/addon/hint/show-hint.min.css">
@@ -209,7 +209,7 @@
         <div class="header">
             <div class="header-title">
                 <span>🐍</span>
-                <span id="headerTitle">Snakeflex V1.75 - Python Web Terminal</span>
+                <span id="headerTitle">Snakeflex V1.6 - Python Web Terminal</span>
                 <button class="shell-btn" id="shellBtn" onclick="openShell()">
                     <span>>_</span>
                     Shell
@@ -382,13 +382,6 @@
         let navigationHistory = [];
         let isLoadingFiles = false;
 
-        // WebSocket Keep-Alive Variables
-        let pingInterval = null;
-        let shellPingInterval = null;
-        let reconnectAttempts = 0;
-        const maxReconnectAttempts = 5;
-        const pingIntervalTime = 30000; // 30 seconds
-
         // --- Editor Variables ---
        let currentEditingFile = null;
        let originalContent = '';
@@ -420,88 +413,24 @@
        }
        
        function openShell() {
-           if (!shellEnabled) { 
-               alert('Interactive shell is disabled.'); 
-               return; 
-           }
-           
+           if (!shellEnabled) { alert('Interactive shell is disabled.'); return; }
            initializeShell();
            const modal = document.getElementById('shellModal');
            modal.style.display = 'block';
-           setTimeout(() => { 
-               fitAddon.fit(); 
-               term.focus(); 
-           }, 50);
-           
-           connectShellWebSocket();
-       }
-
-       function connectShellWebSocket() {
-           if (!shellEnabled) return;
-           
+           setTimeout(() => { fitAddon.fit(); term.focus(); }, 50);
            if (shellWs && shellWs.readyState === WebSocket.OPEN) return;
-           
            term.write('Connecting to shell...\r\n');
            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
            shellWs = new WebSocket(`${protocol}//${location.host}${BASE_PATH}/ws-shell`);
-           
-           shellWs.onopen = () => {
-               term.clear();
-               const initialSize = { type: 'resize', cols: term.cols, rows: term.rows };
-               shellWs.send(JSON.stringify(initialSize));
-               startShellPingInterval();
-           };
-           
-           shellWs.onmessage = async (event) => {
-               if (event.data instanceof ArrayBuffer) {
-                   term.write(new Uint8Array(event.data));
-               } else {
-                   try {
-                       const data = JSON.parse(event.data);
-                       if (data.type === 'ping') {
-                           shellWs.send(JSON.stringify({ type: 'pong' }));
-                       }
-                   } catch (e) {
-                       term.write(event.data);
-                   }
-               }
-           };
-           
-           shellWs.onerror = (err) => {
-               term.write('\r\n\x1b[31mShell connection error.\x1b[0m\r\n');
-               stopShellPingInterval();
-           };
-           
-           shellWs.onclose = () => {
-               term.write('\r\n\x1b[31mShell disconnected.\x1b[0m\r\n');
-               stopShellPingInterval();
-           };
-       }
-
-       function startShellPingInterval() {
-           stopShellPingInterval();
-           
-           shellPingInterval = setInterval(() => {
-               if (shellWs && shellWs.readyState === WebSocket.OPEN) {
-                   shellWs.send(JSON.stringify({ type: 'ping' }));
-               }
-           }, pingIntervalTime);
-       }
-
-       function stopShellPingInterval() {
-           if (shellPingInterval) {
-               clearInterval(shellPingInterval);
-               shellPingInterval = null;
-           }
+           shellWs.onopen = () => { term.clear(); const initialSize = { type: 'resize', cols: term.cols, rows: term.rows }; shellWs.send(JSON.stringify(initialSize)); };
+           shellWs.onmessage = async (event) => { const data = await event.data.arrayBuffer(); term.write(new Uint8Array(data)); };
+           shellWs.onerror = (err) => { term.write('\r\n\x1b[31mConnection Error.\x1b[0m\r\n'); };
+           shellWs.onclose = () => { term.write('\r\n\x1b[31mShell disconnected.\x1b[0m\r\n'); };
        }
        
        function closeShell() {
            document.getElementById('shellModal').style.display = 'none';
-           stopShellPingInterval();
-           if (shellWs) { 
-               shellWs.close(); 
-               shellWs = null; 
-           }
+           if (shellWs) { shellWs.close(); shellWs = null; }
        }
        
        window.addEventListener('resize', () => {
@@ -589,80 +518,11 @@
        }
        // --- ENHANCED NAVIGATION FUNCTIONS END ---
 
-       // --- WEBSOCKET KEEP-ALIVE FUNCTIONS START ---
-       function connectWebSocket() {
-           const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-           ws = new WebSocket(`${protocol}//${location.host}${BASE_PATH}/ws`);
-
-           ws.onopen = () => {
-               addOutput(`🔗 WebSocket connected!`, 'success');
-               reconnectAttempts = 0;
-               startPingInterval();
-           };
-           
-           ws.onmessage = event => {
-               const data = JSON.parse(event.data);
-               
-               if (data.type === 'ping') {
-                   if (ws.readyState === WebSocket.OPEN) {
-                       ws.send(JSON.stringify({ type: 'pong' }));
-                   }
-                   return;
-               }
-               
-               if (data.type === 'pong') {
-                   return;
-               }
-               
-               handleMessage(data);
-           };
-           
-           ws.onclose = (event) => {
-               stopPingInterval();
-               
-               if (event.code === 1000) {
-                   addOutput('🔗 WebSocket closed normally.', 'info');
-                   return;
-               }
-               
-               if (reconnectAttempts < maxReconnectAttempts) {
-                   reconnectAttempts++;
-                   const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000);
-                   addOutput(`❌ WebSocket disconnected. Reconnecting in ${delay/1000}s... (attempt ${reconnectAttempts}/${maxReconnectAttempts})`, 'stderr');
-                   setTimeout(connectWebSocket, delay);
-               } else {
-                   addOutput('❌ WebSocket connection failed after multiple attempts. Please refresh the page.', 'stderr');
-               }
-           };
-           
-           ws.onerror = (error) => {
-               addOutput('❌ WebSocket error occurred.', 'stderr');
-           };
-       }
-
-       function startPingInterval() {
-           stopPingInterval();
-           
-           pingInterval = setInterval(() => {
-               if (ws && ws.readyState === WebSocket.OPEN) {
-                   ws.send(JSON.stringify({ type: 'ping' }));
-               }
-           }, pingIntervalTime);
-       }
-
-       function stopPingInterval() {
-           if (pingInterval) {
-               clearInterval(pingInterval);
-               pingInterval = null;
-           }
-       }
-       // --- WEBSOCKET KEEP-ALIVE FUNCTIONS END ---
-
        // --- CORE UI AND APP LOGIC START ---
        function initializeUI() {
            if (!fileManagerEnabled) {
                document.getElementById('sidebar')?.classList.add('hidden');
-               document.getElementById('headerTitle').textContent = 'Snakeflex V1.75 - Python Web Terminal (Secure Mode)';
+               document.getElementById('headerTitle').textContent = 'Snakeflex V1.6 - Python Web Terminal (Secure Mode)';
                window.refreshFiles = () => {};
                window.showCreateModal = () => addOutput('❌ File management disabled', 'stderr');
            } else {
@@ -1146,6 +1006,18 @@
            }
        }
        
+       function connectWebSocket() {
+           const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+           ws = new WebSocket(`${protocol}//${location.host}${BASE_PATH}/ws`);
+
+           ws.onopen = () => addOutput(`🔗 WebSocket connected!`, 'success');
+           ws.onmessage = event => handleMessage(JSON.parse(event.data));
+           ws.onclose = () => {
+               addOutput('❌ WebSocket closed. Reconnecting...', 'stderr');
+               setTimeout(connectWebSocket, 3000);
+           };
+       }
+       
        function executeScript() {
            if (isRunning || !ws || ws.readyState !== WebSocket.OPEN) return;
            
@@ -1291,27 +1163,8 @@
        };
 
        window.addEventListener('beforeunload', () => {
-           stopPingInterval();
-           stopShellPingInterval();
            ws?.close();
            shellWs?.close();
-       });
-
-       // Page visibility API to handle tab switching
-       document.addEventListener('visibilitychange', () => {
-           if (document.hidden) {
-               // Page is hidden - reduce ping frequency
-               stopPingInterval();
-               stopShellPingInterval();
-           } else {
-               // Page is visible again - resume normal ping frequency
-               if (ws && ws.readyState === WebSocket.OPEN) {
-                   startPingInterval();
-               }
-               if (shellWs && shellWs.readyState === WebSocket.OPEN) {
-                   startShellPingInterval();
-               }
-           }
        });
        // --- CORE UI AND APP LOGIC END ---
    </script>

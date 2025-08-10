@@ -1,4 +1,4 @@
-# 🐍 SnakeFlex V1.75
+# 🐍 SnakeFlex V1.6
 
 *A secure, modern web-based Python development environment with interactive shell access, folder navigation, and **reverse proxy support**.*
 
@@ -6,7 +6,7 @@ Run any Python script in your browser with real-time output, interactive input s
 
 ## ✨ What it does
 
-SnakeFlex V1.75 creates a beautiful web-based development environment for Python scripts with complete terminal capabilities and IDE-like folder navigation. Think of it as your IDE, terminal, and shell combined, but accessible from anywhere with a web browser - now with enterprise-grade reverse proxy support.
+SnakeFlex V1.6 creates a beautiful web-based development environment for Python scripts with complete terminal capabilities and IDE-like folder navigation. Think of it as your IDE, terminal, and shell combined, but accessible from anywhere with a web browser - now with enterprise-grade reverse proxy support.
 
 * 🌐 **Universal compatibility** - Works with any Python script without code changes
 * 🔐 **Password authentication** - Secure access with session management and rate limiting
@@ -88,7 +88,7 @@ https://yourdomain.com/snakeflex/
 
 ## 🔄 Reverse Proxy Support
 
-SnakeFlex V1.75 includes enterprise-grade reverse proxy support for production deployments:
+SnakeFlex V1.6 includes enterprise-grade reverse proxy support for production deployments:
 
 ### **🌍 Deployment Features**
 * **Path-aware routing** - Automatically handles subpath deployments
@@ -169,7 +169,7 @@ server {
 
 ## 🔐 Authentication System
 
-SnakeFlex V1.75 includes robust password authentication with rate limiting for secure deployments:
+SnakeFlex V1.6 includes robust password authentication with rate limiting for secure deployments:
 
 ### **🛡️ Security Features**
 * **Password hashing** - SHA-256 hashing, no plaintext storage
@@ -229,7 +229,7 @@ Start without specifying a file and navigate your project structure:
 
 ## ⌨️ Interactive Shell Access
 
-SnakeFlex V1.75 includes full interactive shell access directly in your browser with proxy support:
+SnakeFlex V1.6 includes full interactive shell access directly in your browser with proxy support:
 
 ### **🖥️ Shell Features**
 * **Full terminal emulation** - Complete shell experience using xterm.js
